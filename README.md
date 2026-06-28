@@ -215,7 +215,7 @@ See [`inventory/group_vars/all.yml`](inventory/group_vars/all.yml) for the full 
 
 ## Testing OSAC Components
 
-Each OSAC component can be tested by overriding its code, runtime image, or both. Code overrides work by placing the component repo at a known path — if the directory exists, it is overlaid into the installer's submodule. If it doesn't exist and a branch is set, it is cloned first.
+Each OSAC component can be tested by placing its code at a known directory and optionally overriding its runtime image. If the directory exists, the code is overlaid into the installer's submodule during `deploy-osac`.
 
 ### Override Directories
 
@@ -226,65 +226,59 @@ Each OSAC component can be tested by overriding its code, runtime image, or both
 | **fulfillment-service** | `/opt/fulfillment-service` | `base/osac-fulfillment-service` + CLI build |
 | **osac-aap** | `/opt/osac-aap` | `base/osac-aap` |
 
-### Component Variables
+### Image Overrides
 
-| Component | Repo/Branch | Runtime Image |
-|-----------|-------------|---------------|
-| **osac-installer** | `osac_installer_repo`, `osac_installer_branch` | — |
-| **osac-operator** | `osac_operator_repo`, `osac_operator_branch` | `osac_operator_image` |
-| **fulfillment-service** | `fulfillment_service_repo`, `fulfillment_service_branch` | `fulfillment_service_image` |
-| **osac-aap** | `osac_aap_repo`, `osac_aap_branch` | `osac_aap_image` |
-
-All variables default to empty. When empty, the installer's submodule pins and Helm defaults are used.
+| Component | Variable |
+|-----------|----------|
+| **osac-operator** | `osac_operator_image` |
+| **fulfillment-service** | `fulfillment_service_image` |
+| **osac-aap** | `osac_aap_image` |
 
 ### How It Works
 
-1. If the override directory already exists (user placed it, or CI extracted it), it is used as-is.
-2. If it doesn't exist and a **branch** is set, the repo is cloned there.
-3. The code is then overlaid (rsync) into the installer's submodule directory.
-4. If an **image** is set, the runtime container image is overridden in Helm values.
+1. If the override directory exists (user cloned it, or CI extracted it), the code is overlaid (rsync) into the installer's submodule directory.
+2. If it doesn't exist, the installer's submodule pin is used.
+3. If an **image** is set, the runtime container image is overridden in Helm values.
 
-To fully test a component, set **both** branch and image so the code and runtime match.
+To fully test a component, place the code **and** set the image so both match.
 
 ### Examples
 
-**Test an osac-operator version (code + image):**
+**Test an osac-operator version:**
 ```bash
+git clone -b feature-x https://github.com/osac-project/osac-operator.git /opt/osac-operator
 make destroy-osac
-make deploy-osac EXTRA_VARS='{"osac_operator_branch": "feature-x", "osac_operator_image": "quay.io/osac-project/osac-operator:feature-x"}'
+make deploy-osac EXTRA_VARS='{"osac_operator_image": "quay.io/osac-project/osac-operator:feature-x"}'
 ```
 
 **Test a fulfillment-service version (code + CLI + image):**
 ```bash
+rm -rf /opt/fulfillment-service
+git clone -b feature-x https://github.com/osac-project/fulfillment-service.git /opt/fulfillment-service
 make destroy-osac
-make setup EXTRA_VARS='{"fulfillment_service_branch": "feature-x"}'
-make deploy-osac EXTRA_VARS='{"fulfillment_service_branch": "feature-x", "fulfillment_service_image": "quay.io/osac-project/fulfillment-service:feature-x"}'
-```
-
-Setting `fulfillment_service_branch` in both targets ensures the CLI is built from the same code that is overlaid into the installer.
-
-**Place a component manually (e.g., local checkout):**
-```bash
-git clone -b my-branch https://github.com/osac-project/osac-operator.git /opt/osac-operator
-make destroy-osac
-make deploy-osac EXTRA_VARS='{"osac_operator_image": "quay.io/osac-project/osac-operator:my-branch"}'
+make setup    # rebuilds CLI from /opt/fulfillment-service
+make deploy-osac EXTRA_VARS='{"fulfillment_service_image": "quay.io/osac-project/fulfillment-service:feature-x"}'
 ```
 
 **Test multiple components at once:**
 ```bash
+git clone -b pr-42 https://github.com/osac-project/osac-operator.git /opt/osac-operator
+git clone -b pr-99 https://github.com/osac-project/osac-aap.git /opt/osac-aap
 make destroy-osac
-make deploy-osac EXTRA_VARS='{"osac_operator_branch": "pr-42", "osac_operator_image": "quay.io/osac-project/osac-operator:pr-42", "fulfillment_service_branch": "pr-99", "fulfillment_service_image": "quay.io/osac-project/fulfillment-service:pr-99"}'
+make deploy-osac EXTRA_VARS='{"osac_operator_image": "quay.io/osac-project/osac-operator:pr-42", "osac_aap_image": "quay.io/osac-project/osac-aap-ee:pr-99"}'
 ```
 
-**Override only the installer (e.g., test a new Helm chart structure):**
+**Override only the installer:**
 ```bash
+rm -rf /opt/osac-installer
+git clone -b feature-y https://github.com/osac-project/osac-installer.git /opt/osac-installer
 make destroy-osac
-make deploy-osac EXTRA_VARS='{"osac_installer_branch": "feature-y"}'
+make deploy-osac
 ```
 
 ### How It Works in CI
 
-In CI, component code is pre-extracted from container images to the same override directories (`/opt/osac-installer`, etc.). Since the directories already exist when Ansible runs, cloning is skipped automatically — no special flags needed. CI only passes runtime image overrides:
+In CI, component code is pre-extracted from container images to the same override directories (`/opt/osac-installer`, etc.). Since the directories already exist when Ansible runs, cloning is skipped automatically. CI only passes runtime image overrides:
 
 ```bash
 make deploy-osac EXTRA_VARS='{

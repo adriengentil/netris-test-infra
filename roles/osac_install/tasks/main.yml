@@ -59,44 +59,20 @@
     - /opt/osac-aap
   register: _component_dirs
 
-- name: Clone osac-operator override
-  ansible.builtin.git:
-    repo: "{{ osac_operator_repo }}"
-    dest: /opt/osac-operator
-    version: "{{ osac_operator_branch }}"
-    force: true
-  when: not _component_dirs.results[0].stat.exists and osac_operator_branch | length > 0
-
-- name: Clone fulfillment-service override
-  ansible.builtin.git:
-    repo: "{{ fulfillment_service_repo }}"
-    dest: /opt/fulfillment-service
-    version: "{{ fulfillment_service_branch }}"
-    force: true
-  when: not _component_dirs.results[1].stat.exists and fulfillment_service_branch | length > 0
-
-- name: Clone osac-aap override
-  ansible.builtin.git:
-    repo: "{{ osac_aap_repo }}"
-    dest: /opt/osac-aap
-    version: "{{ osac_aap_branch }}"
-    force: true
-  when: not _component_dirs.results[2].stat.exists and osac_aap_branch | length > 0
-
 - name: Overlay osac-operator into installer
   ansible.builtin.shell:
     cmd: rsync -a --delete /opt/osac-operator/ {{ osac_installer_dir }}/base/osac-operator/
-  when: _component_dirs.results[0].stat.exists or osac_operator_branch | length > 0
+  when: _component_dirs.results[0].stat.exists
 
 - name: Overlay fulfillment-service into installer
   ansible.builtin.shell:
     cmd: rsync -a --delete /opt/fulfillment-service/ {{ osac_installer_dir }}/base/osac-fulfillment-service/
-  when: _component_dirs.results[1].stat.exists or fulfillment_service_branch | length > 0
+  when: _component_dirs.results[1].stat.exists
 
 - name: Overlay osac-aap into installer
   ansible.builtin.shell:
     cmd: rsync -a --delete /opt/osac-aap/ {{ osac_installer_dir }}/base/osac-aap/
-  when: _component_dirs.results[2].stat.exists or osac_aap_branch | length > 0
+  when: _component_dirs.results[2].stat.exists
 
 - name: Copy development overlay to working overlay
   ansible.builtin.copy:

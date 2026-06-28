@@ -1,0 +1,3 @@
+---
+fulfillment_service_repo: "https://github.com/osac-project/fulfillment-service.git"
+fulfillment_service_branch: "main"

@@ -44,25 +44,17 @@ osac_kustomize_overlay: "osac-devel"
 osac_values_file: "values/development/values.yaml"
 osac_license_path: "{{ inventory_dir }}/../license.zip"
 
-# OSAC Component overrides (leave empty to use osac-installer defaults)
-#
-# Each component can be overridden by placing code at its override dir,
-# or by setting a branch (cloned to the override dir if not already present).
-# The code is then overlaid into the installer's submodule directory.
-# Setting an image overrides the runtime container image in Helm values.
+# OSAC Component overrides
+# Place component code at the override directory to test a specific version.
+# If the directory exists, it is overlaid into the installer's submodule.
+# Set the image to override the runtime container image in Helm values.
 #
 # Override dirs:
 #   /opt/osac-operator           — overlaid into base/osac-operator
 #   /opt/fulfillment-service     — overlaid into base/osac-fulfillment-service + CLI build
 #   /opt/osac-aap                — overlaid into base/osac-aap
-osac_operator_repo: "https://github.com/osac-project/osac-operator.git"
-osac_operator_branch: ""
 osac_operator_image: ""
-fulfillment_service_repo: "https://github.com/osac-project/fulfillment-service.git"
-fulfillment_service_branch: ""
 fulfillment_service_image: ""
-osac_aap_repo: "https://github.com/osac-project/osac-aap.git"
-osac_aap_branch: ""
 osac_aap_image: ""
 
 # CaaS OCP Version
