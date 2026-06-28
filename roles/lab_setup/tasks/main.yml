@@ -55,7 +55,7 @@
   ansible.builtin.git:
     repo: "{{ fulfillment_service_repo }}"
     dest: /opt/fulfillment-service
-    version: "{{ fulfillment_service_branch }}"
+    version: "{{ fulfillment_service_branch | default('main', true) }}"
     force: true
   when: not fulfillment_service_skip_clone
 

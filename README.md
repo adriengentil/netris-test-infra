@@ -215,43 +215,45 @@ See [`inventory/group_vars/all.yml`](inventory/group_vars/all.yml) for the full 
 
 ## Testing OSAC Components
 
-Each OSAC component can be tested independently by overriding its version, image, or both via `EXTRA_VARS`.
+Each OSAC component can be tested by overriding its code (branch), runtime image, or both via `EXTRA_VARS`. When a branch is set, the component repo is cloned over the installer's submodule, so the Helm charts and code match the image being tested.
 
 ### Component Variables
 
-| Component | Repo/Branch | Runtime Image | Skip Clone |
+| Component | Repo/Branch (code override) | Runtime Image | Skip Clone |
 |-----------|-------------|---------------|------------|
 | **osac-installer** | `osac_installer_repo`, `osac_installer_branch` | — | `osac_installer_skip_clone` |
-| **osac-operator** | (embedded in osac-installer) | `osac_operator_image` | — |
+| **osac-operator** | `osac_operator_repo`, `osac_operator_branch` | `osac_operator_image` | — |
 | **fulfillment-service** | `fulfillment_service_repo`, `fulfillment_service_branch` | `fulfillment_service_image` | `fulfillment_service_skip_clone` |
-| **osac-aap** | `osac_aap_branch` | `osac_aap_image` | — |
+| **osac-aap** | `osac_aap_repo`, `osac_aap_branch` | `osac_aap_image` | — |
 
-- **Repo/Branch** controls which source code is cloned (for Helm charts, CLI builds, etc.).
-- **Runtime Image** overrides the container image deployed to the cluster via Helm values.
-- **Skip Clone** skips the git clone when the code is already present (e.g., pre-extracted from a container image in CI).
+All branch and image variables default to empty. When empty:
+- **Branch**: the installer's submodule pin is used (no code override).
+- **Image**: the installer's Helm chart defaults are used (no image override).
+
+Setting a **branch** clones the component repo at that branch into the installer's submodule directory, replacing the pinned code. For fulfillment-service, the same branch is also used to build the `osac` CLI.
+
+Setting an **image** patches the Helm values file so the cluster runs that specific container image.
+
+To fully test a component, set **both** branch and image so the code and runtime match.
 
 ### Examples
 
-**Test a specific osac-operator image:**
+**Test an osac-operator version (code + image):**
 ```bash
 make destroy-osac
-make deploy-osac EXTRA_VARS='{"osac_operator_image": "quay.io/osac-project/osac-operator:my-tag"}'
+make deploy-osac EXTRA_VARS='{"osac_operator_branch": "feature-x", "osac_operator_image": "quay.io/osac-project/osac-operator:feature-x"}'
 ```
 
-**Test a fulfillment-service branch (source + image):**
+**Test a fulfillment-service version (code + CLI + image):**
 ```bash
 make destroy-osac
 make setup EXTRA_VARS='{"fulfillment_service_branch": "feature-x"}'
-make deploy-osac EXTRA_VARS='{"fulfillment_service_image": "quay.io/osac-project/fulfillment-service:feature-x"}'
+make deploy-osac EXTRA_VARS='{"fulfillment_service_branch": "feature-x", "fulfillment_service_image": "quay.io/osac-project/fulfillment-service:feature-x"}'
 ```
 
-**Test an osac-installer branch:**
-```bash
-make destroy-osac
-make deploy-osac EXTRA_VARS='{"osac_installer_branch": "feature-y"}'
-```
+Setting `fulfillment_service_branch` in both targets ensures the CLI is built from the same code that is overlaid into the installer.
 
-**Test an osac-aap branch and image:**
+**Test an osac-aap version (code + image):**
 ```bash
 make destroy-osac
 make deploy-osac EXTRA_VARS='{"osac_aap_branch": "feature-z", "osac_aap_image": "quay.io/osac-project/osac-aap-ee:feature-z"}'
@@ -260,7 +262,13 @@ make deploy-osac EXTRA_VARS='{"osac_aap_branch": "feature-z", "osac_aap_image": 
 **Test multiple components at once:**
 ```bash
 make destroy-osac
-make deploy-osac EXTRA_VARS='{"osac_operator_image": "quay.io/osac-project/osac-operator:pr-42", "fulfillment_service_image": "quay.io/osac-project/fulfillment-service:pr-99"}'
+make deploy-osac EXTRA_VARS='{"osac_operator_branch": "pr-42", "osac_operator_image": "quay.io/osac-project/osac-operator:pr-42", "fulfillment_service_branch": "pr-99", "fulfillment_service_image": "quay.io/osac-project/fulfillment-service:pr-99"}'
+```
+
+**Override only the installer (e.g., test a new Helm chart structure):**
+```bash
+make destroy-osac
+make deploy-osac EXTRA_VARS='{"osac_installer_branch": "feature-y"}'
 ```
 
 ### How It Works in CI

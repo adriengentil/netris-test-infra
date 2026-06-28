@@ -45,6 +45,30 @@
   changed_when: _submodule_update.stdout | length > 0
   when: not osac_installer_skip_clone
 
+- name: Override osac-operator code in installer
+  ansible.builtin.git:
+    repo: "{{ osac_operator_repo }}"
+    dest: "{{ osac_installer_dir }}/base/osac-operator"
+    version: "{{ osac_operator_branch }}"
+    force: true
+  when: osac_operator_branch | length > 0 and not osac_installer_skip_clone
+
+- name: Override fulfillment-service code in installer
+  ansible.builtin.git:
+    repo: "{{ fulfillment_service_repo }}"
+    dest: "{{ osac_installer_dir }}/base/osac-fulfillment-service"
+    version: "{{ fulfillment_service_branch }}"
+    force: true
+  when: fulfillment_service_branch | length > 0 and not osac_installer_skip_clone
+
+- name: Override osac-aap code in installer
+  ansible.builtin.git:
+    repo: "{{ osac_aap_repo }}"
+    dest: "{{ osac_installer_dir }}/base/osac-aap"
+    version: "{{ osac_aap_branch }}"
+    force: true
+  when: osac_aap_branch | length > 0 and not osac_installer_skip_clone
+
 - name: Copy development overlay to working overlay
   ansible.builtin.copy:
     src: "{{ osac_installer_dir }}/overlays/development/"
@@ -308,7 +332,7 @@
       export INSTALLER_KUSTOMIZE_OVERLAY={{ osac_kustomize_overlay }}
       export VALUES_FILE={{ osac_values_file }}
       export EXTRA_SERVICES=true
-      export AAP_PROJECT_GIT_BRANCH={{ osac_aap_branch | default('main') }}
+      export AAP_PROJECT_GIT_BRANCH={{ osac_aap_branch | default('main', true) }}
       export NETWORK_CLASS=netris
       export NETWORK_STEPS_COLLECTION=netris.steps
       export EXTERNAL_ACCESS_BASE_DOMAIN={{ ocp_base_domain }}

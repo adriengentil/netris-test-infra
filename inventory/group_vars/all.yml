@@ -48,13 +48,18 @@ osac_license_path: "{{ inventory_dir }}/../license.zip"
 osac_installer_skip_clone: false
 fulfillment_service_skip_clone: false
 
-# OSAC Component Images (leave empty to use osac-installer defaults)
+# OSAC Component overrides (leave empty to use osac-installer submodule pins)
+# When branch is set, the component repo is cloned over the installer's submodule.
+# When image is set, the runtime container image is overridden in Helm values.
+osac_operator_repo: "https://github.com/osac-project/osac-operator.git"
+osac_operator_branch: ""
 osac_operator_image: ""
-fulfillment_service_image: ""
-osac_aap_image: ""
-osac_aap_branch: "main"
 fulfillment_service_repo: "https://github.com/osac-project/fulfillment-service.git"
-fulfillment_service_branch: "main"
+fulfillment_service_branch: ""
+fulfillment_service_image: ""
+osac_aap_repo: "https://github.com/osac-project/osac-aap.git"
+osac_aap_branch: ""
+osac_aap_image: ""
 
 # CaaS OCP Version
 caas_ocp_version: "4.21"
