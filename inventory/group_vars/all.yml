@@ -44,13 +44,17 @@ osac_kustomize_overlay: "osac-devel"
 osac_values_file: "values/development/values.yaml"
 osac_license_path: "{{ inventory_dir }}/../license.zip"
 
-# Skip cloning from git (set to true in CI when code is pre-extracted from image)
-osac_installer_skip_clone: false
-fulfillment_service_skip_clone: false
-
-# OSAC Component overrides (leave empty to use osac-installer submodule pins)
-# When branch is set, the component repo is cloned over the installer's submodule.
-# When image is set, the runtime container image is overridden in Helm values.
+# OSAC Component overrides (leave empty to use osac-installer defaults)
+#
+# Each component can be overridden by placing code at its override dir,
+# or by setting a branch (cloned to the override dir if not already present).
+# The code is then overlaid into the installer's submodule directory.
+# Setting an image overrides the runtime container image in Helm values.
+#
+# Override dirs:
+#   /opt/osac-operator           — overlaid into base/osac-operator
+#   /opt/fulfillment-service     — overlaid into base/osac-fulfillment-service + CLI build
+#   /opt/osac-aap                — overlaid into base/osac-aap
 osac_operator_repo: "https://github.com/osac-project/osac-operator.git"
 osac_operator_branch: ""
 osac_operator_image: ""

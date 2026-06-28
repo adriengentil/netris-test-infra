@@ -51,13 +51,18 @@
         | tar xzf - -C /usr/local
     creates: /usr/local/go/bin/go
 
+- name: Check if fulfillment-service already exists
+  ansible.builtin.stat:
+    path: /opt/fulfillment-service
+  register: _fs_exists
+
 - name: Clone fulfillment-service
   ansible.builtin.git:
     repo: "{{ fulfillment_service_repo }}"
     dest: /opt/fulfillment-service
     version: "{{ fulfillment_service_branch | default('main', true) }}"
     force: true
-  when: not fulfillment_service_skip_clone
+  when: not _fs_exists.stat.exists
 
 - name: Build osac CLI
   ansible.builtin.command:
@@ -67,4 +72,3 @@
   environment:
     GOPATH: /root/go
     GOCACHE: /root/.cache/go-build
-  when: not fulfillment_service_skip_clone

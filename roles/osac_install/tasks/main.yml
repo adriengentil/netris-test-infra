@@ -29,13 +29,18 @@
   delay: 10
   changed_when: "'created' in _ns_create.stdout"
 
+- name: Check if osac-installer already exists
+  ansible.builtin.stat:
+    path: "{{ osac_installer_dir }}/scripts/setup.sh"
+  register: _installer_exists
+
 - name: Clone osac-installer
   ansible.builtin.git:
     repo: "{{ osac_installer_repo }}"
     dest: "{{ osac_installer_dir }}"
     version: "{{ osac_installer_branch }}"
     force: true
-  when: not osac_installer_skip_clone
+  when: not _installer_exists.stat.exists
 
 - name: Initialize submodules
   ansible.builtin.command:
@@ -43,31 +48,55 @@
     chdir: "{{ osac_installer_dir }}"
   register: _submodule_update
   changed_when: _submodule_update.stdout | length > 0
-  when: not osac_installer_skip_clone
+  when: not _installer_exists.stat.exists
 
-- name: Override osac-operator code in installer
+- name: Check for component override directories
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /opt/osac-operator
+    - /opt/fulfillment-service
+    - /opt/osac-aap
+  register: _component_dirs
+
+- name: Clone osac-operator override
   ansible.builtin.git:
     repo: "{{ osac_operator_repo }}"
-    dest: "{{ osac_installer_dir }}/base/osac-operator"
+    dest: /opt/osac-operator
     version: "{{ osac_operator_branch }}"
     force: true
-  when: osac_operator_branch | length > 0 and not osac_installer_skip_clone
+  when: not _component_dirs.results[0].stat.exists and osac_operator_branch | length > 0
 
-- name: Override fulfillment-service code in installer
+- name: Clone fulfillment-service override
   ansible.builtin.git:
     repo: "{{ fulfillment_service_repo }}"
-    dest: "{{ osac_installer_dir }}/base/osac-fulfillment-service"
+    dest: /opt/fulfillment-service
     version: "{{ fulfillment_service_branch }}"
     force: true
-  when: fulfillment_service_branch | length > 0 and not osac_installer_skip_clone
+  when: not _component_dirs.results[1].stat.exists and fulfillment_service_branch | length > 0
 
-- name: Override osac-aap code in installer
+- name: Clone osac-aap override
   ansible.builtin.git:
     repo: "{{ osac_aap_repo }}"
-    dest: "{{ osac_installer_dir }}/base/osac-aap"
+    dest: /opt/osac-aap
     version: "{{ osac_aap_branch }}"
     force: true
-  when: osac_aap_branch | length > 0 and not osac_installer_skip_clone
+  when: not _component_dirs.results[2].stat.exists and osac_aap_branch | length > 0
+
+- name: Overlay osac-operator into installer
+  ansible.builtin.shell:
+    cmd: rsync -a --delete /opt/osac-operator/ {{ osac_installer_dir }}/base/osac-operator/
+  when: _component_dirs.results[0].stat.exists or osac_operator_branch | length > 0
+
+- name: Overlay fulfillment-service into installer
+  ansible.builtin.shell:
+    cmd: rsync -a --delete /opt/fulfillment-service/ {{ osac_installer_dir }}/base/osac-fulfillment-service/
+  when: _component_dirs.results[1].stat.exists or fulfillment_service_branch | length > 0
+
+- name: Overlay osac-aap into installer
+  ansible.builtin.shell:
+    cmd: rsync -a --delete /opt/osac-aap/ {{ osac_installer_dir }}/base/osac-aap/
+  when: _component_dirs.results[2].stat.exists or osac_aap_branch | length > 0
 
 - name: Copy development overlay to working overlay
   ansible.builtin.copy:
