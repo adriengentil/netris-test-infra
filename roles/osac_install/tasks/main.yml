@@ -97,17 +97,20 @@
     regexp: 'OSAC_ENABLE_CLUSTER_ORDER_CONTROLLER'
     replace: 'OSAC_ENABLE_CLUSTER_CONTROLLER'
 
-- name: Inject AAP token from secret into operator chart template
-  ansible.builtin.replace:
-    path: "{{ osac_installer_dir }}/base/osac-operator/charts/operator/templates/deployment.yaml"
-    regexp: >-
-      {% raw %}\{\{- if \.Values\.aap\.token \}\}\n\s+- name: OSAC_AAP_TOKEN\n\s+value:.*\n\s+\{\{- end \}\}{% endraw %}
-    replace: |-
-      - name: OSAC_AAP_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: osac-aap-api-token
-                      key: token
+- name: Configure AAP token secret reference in values file
+  block:
+    - name: Read values file for AAP token patch
+      ansible.builtin.slurp:
+        src: "{{ osac_installer_dir }}/{{ osac_values_file }}"
+      register: _values_aap_raw
+
+    - name: Write values file with AAP token secret
+      ansible.builtin.copy:
+        dest: "{{ osac_installer_dir }}/{{ osac_values_file }}"
+        content: >-
+          {{ _values_aap_raw.content | b64decode | from_yaml
+             | combine({'operator': {'aap': {'tokenSecret': {'name': 'osac-aap-api-token', 'key': 'token'}}}}, recursive=true)
+             | to_nice_yaml(indent=2) }}
 
 - name: Disable bare-metal fulfillment operator
   ansible.builtin.blockinfile:
