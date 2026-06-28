@@ -221,6 +221,7 @@ Each OSAC component can be tested by setting its branch and/or runtime image via
 
 | Component | Branch | Image | Effect |
 |-----------|--------|-------|--------|
+| **osac-installer** | `osac_installer_branch` | — | Installer repo cloned at this branch |
 | **osac-operator** | `osac_operator_branch` | `osac_operator_image` | Cloned into installer `base/osac-operator` |
 | **fulfillment-service** | `fulfillment_service_branch` | `fulfillment_service_image` | Cloned into installer `base/osac-fulfillment-service` + CLI build |
 | **osac-aap** | `osac_aap_branch` | `osac_aap_image` | Sets `AAP_PROJECT_GIT_BRANCH` (no code overlay) |
