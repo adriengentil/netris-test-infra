@@ -7,7 +7,7 @@ EXTRA_VARS ?=
 ANSIBLE_EXTRA = $(if $(EXTRA_VARS),-e '$(EXTRA_VARS)')
 
 # Full shared pipeline
-deploy: setup deploy-lab deploy-ocp deploy-osac
+deploy: deploy-lab deploy-ocp deploy-osac
 
 setup:
 	ansible-playbook playbooks/setup-lab.yml $(ANSIBLE_EXTRA)

@@ -57,6 +57,7 @@
     dest: /opt/fulfillment-service
     version: "{{ fulfillment_service_branch }}"
     force: true
+  when: not fulfillment_service_skip_clone
 
 - name: Build osac CLI
   ansible.builtin.command:
@@ -66,3 +67,4 @@
   environment:
     GOPATH: /root/go
     GOCACHE: /root/.cache/go-build
+  when: not fulfillment_service_skip_clone
