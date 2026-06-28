@@ -275,15 +275,3 @@ git clone -b feature-y https://github.com/osac-project/osac-installer.git /opt/o
 make destroy-osac
 make deploy-osac
 ```
-
-### How It Works in CI
-
-In CI, component code is pre-extracted from container images to the same override directories (`/opt/osac-installer`, etc.). Since the directories already exist when Ansible runs, cloning is skipped automatically. CI only passes runtime image overrides:
-
-```bash
-make deploy-osac EXTRA_VARS='{
-  "osac_operator_image": "...",
-  "fulfillment_service_image": "...",
-  "osac_aap_image": "..."
-}'
-```
