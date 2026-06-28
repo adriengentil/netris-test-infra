@@ -10,7 +10,7 @@
   ansible.builtin.command:
     cmd: >-
       osac create cluster
-      --template {{ caas_cluster_template }}
+      --catalog-item {{ caas_catalog_item }}
       --release-image {{ caas_release_image }}
       -f pull_secret={{ pull_secret_path }}
       -f ssh_public_key={{ ssh_public_key_path }}

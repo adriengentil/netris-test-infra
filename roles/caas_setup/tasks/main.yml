@@ -128,7 +128,36 @@
     validate_certs: false
     status_code: [200, 201, 409]
 
-# Step 4: Configure osac CLI
+# Step 4: Create catalog item from template
+- name: Create cluster catalog item
+  ansible.builtin.uri:
+    url: "{{ caas_fulfillment_api }}/api/private/v1/cluster_catalog_items"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ _sa_token.stdout }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      object:
+        id: "{{ caas_catalog_item }}"
+        title: "{{ caas_catalog_item_title }}"
+        description: "{{ caas_catalog_item_description }}"
+        template: "{{ caas_cluster_template }}"
+        published: true
+        field_definitions:
+          - path: "release_image"
+            display_name: "Release Image"
+            editable: true
+          - path: "template_parameters.pull_secret"
+            display_name: "Pull Secret"
+            editable: true
+          - path: "template_parameters.ssh_public_key"
+            display_name: "SSH Public Key"
+            editable: true
+    validate_certs: false
+    status_code: [200, 201, 409]
+
+# Step 5: Configure osac CLI
 - name: Configure osac CLI
   ansible.builtin.copy:
     content: |
