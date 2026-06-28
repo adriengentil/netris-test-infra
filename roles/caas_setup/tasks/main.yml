@@ -138,22 +138,21 @@
       Content-Type: "application/json"
     body_format: json
     body:
-      object:
-        id: "{{ caas_catalog_item }}"
-        title: "{{ caas_catalog_item_title }}"
-        description: "{{ caas_catalog_item_description }}"
-        template: "{{ caas_cluster_template }}"
-        published: true
-        field_definitions:
-          - path: "release_image"
-            display_name: "Release Image"
-            editable: true
-          - path: "template_parameters.pull_secret"
-            display_name: "Pull Secret"
-            editable: true
-          - path: "template_parameters.ssh_public_key"
-            display_name: "SSH Public Key"
-            editable: true
+      id: "{{ caas_catalog_item }}"
+      title: "{{ caas_catalog_item_title }}"
+      description: "{{ caas_catalog_item_description }}"
+      template: "{{ caas_cluster_template }}"
+      published: true
+      field_definitions:
+        - path: "release_image"
+          display_name: "Release Image"
+          editable: true
+        - path: "template_parameters.pull_secret"
+          display_name: "Pull Secret"
+          editable: true
+        - path: "template_parameters.ssh_public_key"
+          display_name: "SSH Public Key"
+          editable: true
     validate_certs: false
     status_code: [200, 201, 409]
 
