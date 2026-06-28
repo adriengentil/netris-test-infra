@@ -29,7 +29,7 @@ vendor/                         # Vendored Ansible collections
 ## Commands
 
 ```
-make deploy                 # Full pipeline: setup + deploy-lab + deploy-ocp + deploy-osac
+make deploy                 # Full pipeline: deploy-lab + deploy-ocp + deploy-osac
 make setup                  # Install prerequisites, cache images, install OCP/OSAC tools
 make deploy-lab             # Deploy netris-lab
 make connectivity           # Re-run lab connectivity (VPN, BGP, softgate agents)

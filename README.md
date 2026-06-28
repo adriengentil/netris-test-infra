@@ -68,7 +68,7 @@ After `make deploy-ocp`, the kubeconfig is at `/root/.kube/config`.
 
 | Target | Description | Time |
 |--------|-------------|------|
-| `make deploy` | Full pipeline: setup → deploy-lab → deploy-ocp → deploy-osac | ~2-3 hrs |
+| `make deploy` | Full pipeline: deploy-lab → deploy-ocp → deploy-osac | ~2-3 hrs |
 | `make setup` | Install prerequisites, cache images, build OCP/OSAC tools | ~10 min |
 | `make deploy-lab` | Deploy netris-lab (K3s, topology, VMs, connectivity) | ~30 min |
 | `make deploy-ocp` | Resize OCP VM + Netris networking + Assisted Service + OCP SNO | ~35-65 min |
@@ -115,7 +115,8 @@ After `make deploy-ocp`, the kubeconfig is at `/root/.kube/config`.
 
 **First deploy on a fresh server:**
 ```bash
-make deploy         # does everything
+make setup          # install prerequisites, cache images, build tools
+make deploy         # deploy lab + OCP + OSAC
 ```
 
 **Re-deploy OSAC after code changes:**
@@ -211,3 +212,69 @@ make deploy-osac EXTRA_VARS='{"osac_installer_branch": "feature-x"}'
 | `caas_host_type_id` | `ci-worker` | Resource class for CaaS agents |
 
 See [`inventory/group_vars/all.yml`](inventory/group_vars/all.yml) for the full list.
+
+## Testing OSAC Components
+
+Each OSAC component can be tested independently by overriding its version, image, or both via `EXTRA_VARS`.
+
+### Component Variables
+
+| Component | Repo/Branch | Runtime Image | Skip Clone |
+|-----------|-------------|---------------|------------|
+| **osac-installer** | `osac_installer_repo`, `osac_installer_branch` | — | `osac_installer_skip_clone` |
+| **osac-operator** | (embedded in osac-installer) | `osac_operator_image` | — |
+| **fulfillment-service** | `fulfillment_service_repo`, `fulfillment_service_branch` | `fulfillment_service_image` | `fulfillment_service_skip_clone` |
+| **osac-aap** | `osac_aap_branch` | `osac_aap_image` | — |
+
+- **Repo/Branch** controls which source code is cloned (for Helm charts, CLI builds, etc.).
+- **Runtime Image** overrides the container image deployed to the cluster via Helm values.
+- **Skip Clone** skips the git clone when the code is already present (e.g., pre-extracted from a container image in CI).
+
+### Examples
+
+**Test a specific osac-operator image:**
+```bash
+make destroy-osac
+make deploy-osac EXTRA_VARS='{"osac_operator_image": "quay.io/osac-project/osac-operator:my-tag"}'
+```
+
+**Test a fulfillment-service branch (source + image):**
+```bash
+make destroy-osac
+make setup EXTRA_VARS='{"fulfillment_service_branch": "feature-x"}'
+make deploy-osac EXTRA_VARS='{"fulfillment_service_image": "quay.io/osac-project/fulfillment-service:feature-x"}'
+```
+
+**Test an osac-installer branch:**
+```bash
+make destroy-osac
+make deploy-osac EXTRA_VARS='{"osac_installer_branch": "feature-y"}'
+```
+
+**Test an osac-aap branch and image:**
+```bash
+make destroy-osac
+make deploy-osac EXTRA_VARS='{"osac_aap_branch": "feature-z", "osac_aap_image": "quay.io/osac-project/osac-aap-ee:feature-z"}'
+```
+
+**Test multiple components at once:**
+```bash
+make destroy-osac
+make deploy-osac EXTRA_VARS='{"osac_operator_image": "quay.io/osac-project/osac-operator:pr-42", "fulfillment_service_image": "quay.io/osac-project/fulfillment-service:pr-99"}'
+```
+
+### How It Works in CI
+
+In CI, component code is pre-extracted from container images rather than cloned from git. The CI step passes skip-clone flags and image overrides together:
+
+```bash
+make deploy-osac EXTRA_VARS='{
+  "osac_installer_skip_clone": true,
+  "fulfillment_service_skip_clone": true,
+  "osac_operator_image": "...",
+  "fulfillment_service_image": "...",
+  "osac_aap_image": "..."
+}'
+```
+
+This allows CI to test the exact code and images built from a PR without cloning any repositories.
