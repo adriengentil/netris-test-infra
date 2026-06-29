@@ -39,8 +39,7 @@ Internet access for OCP image pulls flows through: hgx-00 → NS VNet → softga
 - **Netris license key** — place at repo root as `license.key`
 - **OSAC/AAP license** — place at repo root as `license.zip`
 - **OpenShift pull secret** — place at `/root/pull-secret` (or set `pull_secret_path`; download from [console.redhat.com](https://console.redhat.com/openshift/downloads))
-- **Lab name** — export `LAB_NAME=<your-name>` (e.g., `jsmith`). Each lab gets a unique subdomain under the Route 53 hosted zone to avoid DNS collisions between parallel deployments.
-- **AWS credentials** (for Route 53 DNS) — place an `aws-credentials` file at the repo root (INI format, gitignored) or export `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. The IAM user needs `route53:ChangeResourceRecordSets`, `route53:ListHostedZones`, and `route53:GetChange` permissions on the hosted zone configured in `dns_hosted_zone`.
+- **Config file** — place a `config` file at the repo root (INI format, gitignored) with lab name and AWS credentials. See Quick Start below. The IAM user needs `route53:ChangeResourceRecordSets`, `route53:ListHostedZones`, and `route53:GetChange` permissions on the hosted zone.
 
 All system packages, tools, and SSH keys are installed automatically by `make setup`. A pre-flight check validates all required files, KVM support, and minimum memory before deploying.
 
@@ -55,15 +54,13 @@ cp /path/to/license.key ./license.key
 cp /path/to/license.zip ./license.zip
 cp /path/to/pull-secret /root/pull-secret
 
-# Set a unique lab name
-export LAB_NAME=<your-name>   # e.g., jsmith — avoids DNS collisions between labs
-
-# Place AWS credentials for Route 53 DNS (INI format)
-cat > aws-credentials << EOF
+# Create config file (lab name + AWS credentials for Route 53 DNS)
+cat > config << EOF
 [default]
+lab_name = <your-name>
 aws_access_key_id = <your-key>
 aws_secret_access_key = <your-secret>
-region = us-east-1
+aws_region = us-east-1
 EOF
 
 # Full deployment (setup → lab → OCP → OSAC)

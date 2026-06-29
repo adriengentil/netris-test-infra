@@ -26,9 +26,12 @@ ocp_server_ports:
 ocp_snat_ip: "198.51.100.1"
 ocp_dnat_ip: "198.51.100.2"
 
+# Configuration file (INI format, optional — values fall back to env vars)
+config_path: "{{ inventory_dir }}/../config"
+
 # Lab identity (each user sets their own to avoid DNS collisions)
-lab_name: "{{ lookup('env', 'LAB_NAME') | default('default', true) }}"
-dns_hosted_zone: "{{ lookup('env', 'DNS_HOSTED_ZONE') | default('ecoeng-osac-ci.devcluster.openshift.com', true) }}"
+lab_name: "{{ lookup('ini', 'lab_name section=default file=' + config_path, errors='ignore') | default(lookup('env', 'LAB_NAME'), true) | default('default', true) }}"
+dns_hosted_zone: "{{ lookup('ini', 'dns_hosted_zone section=default file=' + config_path, errors='ignore') | default(lookup('env', 'DNS_HOSTED_ZONE'), true) | default('ecoeng-osac-ci.devcluster.openshift.com', true) }}"
 
 # OCP Installation
 ocp_version: "4.21"
@@ -63,11 +66,10 @@ osac_aap_repo: "https://github.com/osac-project/osac-aap.git"
 osac_aap_branch: ""
 osac_aap_image: ""
 
-# AWS configuration for Route 53 DNS (read from aws-credentials file or environment)
-aws_credentials_path: "{{ inventory_dir }}/../aws-credentials"
-aws_access_key_id: "{{ lookup('ini', 'aws_access_key_id section=default file=' + aws_credentials_path, errors='ignore') | default(lookup('env', 'AWS_ACCESS_KEY_ID'), true) }}"
-aws_secret_access_key: "{{ lookup('ini', 'aws_secret_access_key section=default file=' + aws_credentials_path, errors='ignore') | default(lookup('env', 'AWS_SECRET_ACCESS_KEY'), true) }}"
-aws_region: "{{ lookup('ini', 'region section=default file=' + aws_credentials_path, errors='ignore') | default(lookup('env', 'AWS_DEFAULT_REGION'), true) | default('us-east-1', true) }}"
+# AWS configuration for Route 53 DNS (read from config file or environment)
+aws_access_key_id: "{{ lookup('ini', 'aws_access_key_id section=default file=' + config_path, errors='ignore') | default(lookup('env', 'AWS_ACCESS_KEY_ID'), true) }}"
+aws_secret_access_key: "{{ lookup('ini', 'aws_secret_access_key section=default file=' + config_path, errors='ignore') | default(lookup('env', 'AWS_SECRET_ACCESS_KEY'), true) }}"
+aws_region: "{{ lookup('ini', 'aws_region section=default file=' + config_path, errors='ignore') | default(lookup('env', 'AWS_DEFAULT_REGION'), true) | default('us-east-1', true) }}"
 
 # CaaS OCP Version
 caas_ocp_version: "4.21"
