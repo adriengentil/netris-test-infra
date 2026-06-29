@@ -39,6 +39,8 @@ Internet access for OCP image pulls flows through: hgx-00 → NS VNet → softga
 - **Netris license key** — place at repo root as `license.key`
 - **OSAC/AAP license** — place at repo root as `license.zip`
 - **OpenShift pull secret** — place at `/root/pull-secret` (or set `pull_secret_path`; download from [console.redhat.com](https://console.redhat.com/openshift/downloads))
+- **AWS credentials** (for CaaS DNS via Route 53) — export `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` before running `make deploy-osac`. The credentials need Route 53 access to the hosted zone configured in `dns_hosted_zone`.
+
 All system packages, tools, and SSH keys are installed automatically by `make setup`. A pre-flight check validates all required files, KVM support, and minimum memory before deploying.
 
 ## Quick Start
@@ -51,6 +53,11 @@ cd netris-test-infra
 cp /path/to/license.key ./license.key
 cp /path/to/license.zip ./license.zip
 cp /path/to/pull-secret /root/pull-secret
+
+# Set AWS credentials for Route 53 DNS and a unique lab name
+export AWS_ACCESS_KEY_ID=<your-key>
+export AWS_SECRET_ACCESS_KEY=<your-secret>
+export LAB_NAME=<your-name>   # e.g., jsmith — avoids DNS collisions between labs
 
 # Full deployment (setup → lab → OCP → OSAC)
 make deploy
@@ -193,7 +200,9 @@ make deploy-osac EXTRA_VARS='{"osac_installer_branch": "feature-x"}'
 |----------|---------|-------------|
 | `ocp_version` | `4.21` | OpenShift version |
 | `ocp_cluster_name` | `ocp-sno` | OCP cluster name |
-| `ocp_base_domain` | `osac.local` | DNS base domain |
+| `lab_name` | `$LAB_NAME` or `default` | Per-lab subdomain prefix (avoids DNS collisions) |
+| `dns_hosted_zone` | `ecoeng-osac-ci.devcluster.openshift.com` | Route 53 hosted zone |
+| `ocp_base_domain` | `<lab_name>.<dns_hosted_zone>` | DNS base domain (derived) |
 | `ocp_server_vcpu` | `20` | OCP VM vCPUs |
 | `ocp_server_memory_gb` | `64` | OCP VM RAM (GB) |
 | `ocp_subnet_cidr` | `192.168.40.0/24` | OCP VNet subnet |
