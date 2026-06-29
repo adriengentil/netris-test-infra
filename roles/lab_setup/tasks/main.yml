@@ -27,11 +27,11 @@
       - dnsmasq
     state: present
 
-- name: Install aicli and boto3
+- name: Install aicli and awscli
   ansible.builtin.pip:
     name:
       - aicli
-      - boto3
+      - awscli
     state: present
 
 - name: Install oc CLI
