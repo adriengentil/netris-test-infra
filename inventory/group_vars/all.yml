@@ -63,10 +63,11 @@ osac_aap_repo: "https://github.com/osac-project/osac-aap.git"
 osac_aap_branch: ""
 osac_aap_image: ""
 
-# AWS configuration for Route 53 DNS (read from environment)
-aws_access_key_id: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
-aws_secret_access_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
-aws_region: "{{ lookup('env', 'AWS_DEFAULT_REGION') | default('us-east-1', true) }}"
+# AWS configuration for Route 53 DNS (read from aws-credentials file or environment)
+aws_credentials_path: "{{ inventory_dir }}/../aws-credentials"
+aws_access_key_id: "{{ lookup('ini', 'aws_access_key_id section=default file=' + aws_credentials_path, errors='ignore') | default(lookup('env', 'AWS_ACCESS_KEY_ID'), true) }}"
+aws_secret_access_key: "{{ lookup('ini', 'aws_secret_access_key section=default file=' + aws_credentials_path, errors='ignore') | default(lookup('env', 'AWS_SECRET_ACCESS_KEY'), true) }}"
+aws_region: "{{ lookup('ini', 'region section=default file=' + aws_credentials_path, errors='ignore') | default(lookup('env', 'AWS_DEFAULT_REGION'), true) | default('us-east-1', true) }}"
 
 # CaaS OCP Version
 caas_ocp_version: "4.21"
