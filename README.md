@@ -226,6 +226,8 @@ make deploy-osac EXTRA_VARS='{"osac_installer_branch": "feature-x"}'
 
 See [`inventory/group_vars/all.yml`](inventory/group_vars/all.yml) for the full list.
 
+> **Note:** Variables other than `lab_name`, `dns_hosted_zone`, and the component overrides have not been tested with non-default values. Changing OCP version, cluster name, namespace, subnet, or VM sizing may require additional adjustments to the playbooks.
+
 ## Testing OSAC Components
 
 Each OSAC component can be tested by setting its branch and/or runtime image via `EXTRA_VARS`. When a branch is set, the repo is cloned and overlaid into the installer's submodule. For osac-aap, the branch sets `AAP_PROJECT_GIT_BRANCH` instead (AAP syncs from git directly).
