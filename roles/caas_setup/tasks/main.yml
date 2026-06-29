@@ -156,7 +156,49 @@
     validate_certs: false
     status_code: [200, 201, 409]
 
-# Step 5: Configure osac CLI
+# Step 5: Disable config-as-code schedule in AAP
+- name: Get AAP controller route
+  ansible.builtin.shell:
+    cmd: oc get route osac-aap-controller -n {{ osac_namespace }} -o jsonpath='{.status.ingress[0].host}'
+  environment:
+    KUBECONFIG: /root/.kube/config
+  register: _aap_host
+  changed_when: false
+
+- name: Get AAP admin password
+  ansible.builtin.shell:
+    cmd: oc get secret osac-aap-controller-admin-password -n {{ osac_namespace }} -o jsonpath='{.data.password}' | base64 -d
+  environment:
+    KUBECONFIG: /root/.kube/config
+  register: _aap_pass
+  changed_when: false
+  no_log: true
+
+- name: Find config-as-code schedule
+  ansible.builtin.uri:
+    url: "https://{{ _aap_host.stdout }}/api/v2/schedules/?name=osac-config-as-code"
+    method: GET
+    user: admin
+    password: "{{ _aap_pass.stdout }}"
+    force_basic_auth: true
+    validate_certs: false
+  register: _cac_schedule
+
+- name: Disable config-as-code schedule
+  ansible.builtin.uri:
+    url: "https://{{ _aap_host.stdout }}/api/v2/schedules/{{ _cac_schedule.json.results[0].id }}/"
+    method: PATCH
+    user: admin
+    password: "{{ _aap_pass.stdout }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body:
+      enabled: false
+  when: _cac_schedule.json.count > 0 and _cac_schedule.json.results[0].enabled
+  changed_when: true
+
+# Step 6: Configure osac CLI
 - name: Configure osac CLI
   ansible.builtin.copy:
     content: |
