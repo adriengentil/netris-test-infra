@@ -28,7 +28,7 @@ ocp_dnat_ip: "198.51.100.2"
 
 # Lab identity (each user sets their own to avoid DNS collisions)
 lab_name: "{{ lookup('env', 'LAB_NAME') | default('default', true) }}"
-dns_hosted_zone: "ecoeng-osac-ci.devcluster.openshift.com"
+dns_hosted_zone: "{{ lookup('env', 'DNS_HOSTED_ZONE') | default('ecoeng-osac-ci.devcluster.openshift.com', true) }}"
 
 # OCP Installation
 ocp_version: "4.21"
