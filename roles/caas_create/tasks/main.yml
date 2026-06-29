@@ -10,10 +10,10 @@
   ansible.builtin.command:
     cmd: >-
       osac create cluster
-      --catalog-item {{ caas_catalog_item }}
+      --template {{ caas_cluster_template }}
       --release-image {{ caas_release_image }}
-      --pull-secret-file {{ pull_secret_path }}
-      --ssh-public-key-file {{ ssh_public_key_path }}
+      -f pull_secret={{ pull_secret_path }}
+      -f ssh_public_key={{ ssh_public_key_path }}
       --name {{ caas_cluster_name }}
   register: _cluster_create
   when: _cluster_exists.stdout | default('') != 'exists'
