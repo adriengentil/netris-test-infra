@@ -40,17 +40,32 @@
   retries: 5
   delay: 10
 
+- name: Get agent hostnames
+  ansible.builtin.shell:
+    cmd: >-
+      oc get agent -n {{ caas_agent_namespace }} -o json |
+      python3 -c "import sys,json; agents=json.load(sys.stdin)['items'];
+      print(json.dumps({a['metadata']['name']: a['status']['inventory']['hostname'] for a in agents}))"
+  environment:
+    KUBECONFIG: /root/.kube/config
+  register: _agent_hostnames_raw
+  changed_when: false
+
+- name: Build agent-to-hostname map
+  ansible.builtin.set_fact:
+    _agent_hostname_map: "{{ _agent_hostnames_raw.stdout | from_json }}"
+
 - name: Label agent with netris server name
   ansible.builtin.command:
     cmd: >-
-      oc label agent/{{ caas_agent_names[idx] }} -n {{ caas_agent_namespace }}
-      netris.server/name={{ item.netris_server_name }}
+      oc label agent/{{ item.key }} -n {{ caas_agent_namespace }}
+      netris.server/name={{ (caas_agents | selectattr('vm_pattern', 'search', item.value) | first).netris_server_name }}
       --overwrite
   environment:
     KUBECONFIG: /root/.kube/config
-  loop: "{{ caas_agents }}"
+  loop: "{{ _agent_hostname_map | dict2items }}"
   loop_control:
-    index_var: idx
+    label: "{{ item.value }}"
   register: _label_ns
   changed_when: "'labeled' in _label_ns.stdout and 'not labeled' not in _label_ns.stdout"
   until: _label_ns.rc == 0
