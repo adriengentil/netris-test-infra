@@ -148,6 +148,27 @@
         dest: "{{ osac_installer_dir }}/{{ osac_values_file }}"
         content: "{{ _values_raw.content | b64decode | from_yaml | combine(_image_overrides, recursive=true) | to_nice_yaml(indent=2) }}"
 
+- name: Set DNS and AWS settings in Helm values
+  block:
+    - name: Read values file for DNS settings
+      ansible.builtin.slurp:
+        src: "{{ osac_installer_dir }}/{{ osac_values_file }}"
+      register: _values_dns_raw
+
+    - name: Write values file with DNS and AWS settings
+      ansible.builtin.copy:
+        dest: "{{ osac_installer_dir }}/{{ osac_values_file }}"
+        content: >-
+          {{ _values_dns_raw.content | b64decode | from_yaml
+             | combine({'clusterFulfillment': {'config': {
+                 'DNS_CLASS': 'dns.route53.dns',
+                 'DNS_ZONE': dns_hosted_zone
+               }, 'secret': {
+                 'AWS_ACCESS_KEY_ID': aws_access_key_id,
+                 'AWS_SECRET_ACCESS_KEY': aws_secret_access_key
+               }}}, recursive=true)
+             | to_nice_yaml(indent=2) }}
+
 - name: Ensure overlay files directory exists
   ansible.builtin.file:
     path: "{{ osac_installer_dir }}/overlays/{{ osac_kustomize_overlay }}/files"

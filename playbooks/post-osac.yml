@@ -117,12 +117,3 @@
       environment:
         KUBECONFIG: /root/.kube/config
       changed_when: false
-
-    - name: Patch cluster-fulfillment-ig configmap with DNS settings
-      ansible.builtin.shell:
-        cmd: >-
-          oc patch configmap/cluster-fulfillment-ig -n {{ osac_namespace }} --type=merge
-          -p '{"data":{"DNS_CLASS":"dns.route53.dns","DNS_ZONE":"{{ dns_hosted_zone }}"}}'
-      environment:
-        KUBECONFIG: /root/.kube/config
-      changed_when: true
