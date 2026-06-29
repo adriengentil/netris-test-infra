@@ -1,4 +1,15 @@
 ---
+- name: Validate required environment variables
+  ansible.builtin.assert:
+    that:
+      - lab_name != 'default'
+      - aws_access_key_id | length > 0
+      - aws_secret_access_key | length > 0
+    fail_msg: >-
+      Missing required environment variables. Set LAB_NAME (unique per lab),
+      AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (for Route 53 DNS) before
+      running deploy-osac.
+
 - name: Download kubeconfig if missing
   ansible.builtin.command:
     cmd: aicli -u {{ assisted_service_url }} download kubeconfig {{ ocp_cluster_name }} --path /root/
