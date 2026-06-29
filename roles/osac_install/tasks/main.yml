@@ -310,9 +310,8 @@
       SERVER_SSH_BASTION_HOST=192.168.16.254
       SERVER_SSH_BASTION_USER=root
       SERVER_SSH_USER=root
-      DNS_CLASS=dns.hypervisor.dns
+      DNS_CLASS=dns.route53.dns
       DNS_ZONE={{ ocp_base_domain }}
-      DNS_HOST=192.168.16.1
     mode: "0644"
 
 - name: Write AAP secrets env file
@@ -320,6 +319,8 @@
     dest: "{{ osac_installer_dir }}/overlays/{{ osac_kustomize_overlay }}/files/osac-aap-secrets.env"
     content: |
       NETRIS_PASSWORD={{ netris_password }}
+      AWS_ACCESS_KEY_ID={{ aws_access_key_id }}
+      AWS_SECRET_ACCESS_KEY={{ aws_secret_access_key }}
     mode: "0600"
   no_log: true
 

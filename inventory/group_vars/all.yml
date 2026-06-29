@@ -29,7 +29,7 @@ ocp_dnat_ip: "198.51.100.2"
 # OCP Installation
 ocp_version: "4.21"
 ocp_cluster_name: "ocp-sno"
-ocp_base_domain: "osac.local"
+ocp_base_domain: "ecoeng-osac-ci.devcluster.openshift.com"
 pull_secret_path: "/root/pull-secret"
 ssh_public_key_path: "/root/.ssh/id_rsa.pub"
 assisted_service_url: "http://localhost:8090"
@@ -58,6 +58,10 @@ fulfillment_service_image: ""
 osac_aap_repo: "https://github.com/osac-project/osac-aap.git"
 osac_aap_branch: ""
 osac_aap_image: ""
+
+# AWS credentials for Route 53 DNS (read from environment)
+aws_access_key_id: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+aws_secret_access_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
 
 # CaaS OCP Version
 caas_ocp_version: "4.21"
