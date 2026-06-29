@@ -311,7 +311,7 @@
       SERVER_SSH_BASTION_USER=root
       SERVER_SSH_USER=root
       DNS_CLASS=dns.route53.dns
-      DNS_ZONE={{ ocp_base_domain }}
+      DNS_ZONE={{ dns_hosted_zone }}
     mode: "0644"
 
 - name: Write AAP secrets env file
