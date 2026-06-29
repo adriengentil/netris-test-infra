@@ -54,10 +54,11 @@ cp /path/to/license.key ./license.key
 cp /path/to/license.zip ./license.zip
 cp /path/to/pull-secret /root/pull-secret
 
-# Create config file (lab name + AWS credentials for Route 53 DNS)
+# Create config file (unique lab name + AWS credentials for Route 53 DNS)
+# lab_name becomes a subdomain under the shared hosted zone (e.g., jsmith.ecoeng-osac-ci.devcluster.openshift.com)
 cat > config << EOF
 [default]
-lab_name = <your-name>
+lab_name = <unique-lab-name>
 aws_access_key_id = <your-key>
 aws_secret_access_key = <your-secret>
 aws_region = us-east-1
