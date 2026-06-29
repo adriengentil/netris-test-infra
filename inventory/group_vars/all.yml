@@ -26,10 +26,13 @@ ocp_server_ports:
 ocp_snat_ip: "198.51.100.1"
 ocp_dnat_ip: "198.51.100.2"
 
+# Lab identity (each user sets their own to avoid DNS collisions)
+lab_name: "{{ lookup('env', 'LAB_NAME') | default('default', true) }}"
+
 # OCP Installation
 ocp_version: "4.21"
 ocp_cluster_name: "ocp-sno"
-ocp_base_domain: "ecoeng-osac-ci.devcluster.openshift.com"
+ocp_base_domain: "{{ lab_name }}.ecoeng-osac-ci.devcluster.openshift.com"
 pull_secret_path: "/root/pull-secret"
 ssh_public_key_path: "/root/.ssh/id_rsa.pub"
 assisted_service_url: "http://localhost:8090"
