@@ -92,7 +92,7 @@
   environment:
     AWS_ACCESS_KEY_ID: "{{ aws_access_key_id }}"
     AWS_SECRET_ACCESS_KEY: "{{ aws_secret_access_key }}"
-    AWS_DEFAULT_REGION: us-east-1
+    AWS_DEFAULT_REGION: "{{ aws_region }}"
   register: _r53_zone_id
   changed_when: false
 
@@ -106,7 +106,7 @@
   environment:
     AWS_ACCESS_KEY_ID: "{{ aws_access_key_id }}"
     AWS_SECRET_ACCESS_KEY: "{{ aws_secret_access_key }}"
-    AWS_DEFAULT_REGION: us-east-1
+    AWS_DEFAULT_REGION: "{{ aws_region }}"
   register: _r53_existing
   changed_when: false
 
@@ -150,7 +150,7 @@
   environment:
     AWS_ACCESS_KEY_ID: "{{ aws_access_key_id }}"
     AWS_SECRET_ACCESS_KEY: "{{ aws_secret_access_key }}"
-    AWS_DEFAULT_REGION: us-east-1
+    AWS_DEFAULT_REGION: "{{ aws_region }}"
   changed_when: true
 
 - name: Configure DNS for OCP SNO
