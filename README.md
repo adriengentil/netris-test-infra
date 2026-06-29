@@ -39,7 +39,7 @@ Internet access for OCP image pulls flows through: hgx-00 → NS VNet → softga
 - **Netris license key** — place at repo root as `license.key`
 - **OSAC/AAP license** — place at repo root as `license.zip`
 - **OpenShift pull secret** — place at `/root/pull-secret` (or set `pull_secret_path`; download from [console.redhat.com](https://console.redhat.com/openshift/downloads))
-- **AWS credentials** (for CaaS DNS via Route 53) — export `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` before running `make deploy-osac`. The credentials need Route 53 access to the hosted zone configured in `dns_hosted_zone`.
+- **AWS credentials** (for CaaS DNS via Route 53) — export `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` before running `make deploy-osac`. The IAM user needs permissions to create and delete records in the Route 53 hosted zone configured in `dns_hosted_zone` (`route53:ChangeResourceRecordSets`, `route53:ListHostedZones`, `route53:GetChange`).
 
 All system packages, tools, and SSH keys are installed automatically by `make setup`. A pre-flight check validates all required files, KVM support, and minimum memory before deploying.
 
