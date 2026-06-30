@@ -186,10 +186,10 @@
   ansible.builtin.shell: |
     {
       echo "=== api.{{ ocp_cluster_name }}.{{ ocp_base_domain }} ==="
-      dig +short api.{{ ocp_cluster_name }}.{{ ocp_base_domain }} 2>&1 || echo "dig not available"
+      getent hosts api.{{ ocp_cluster_name }}.{{ ocp_base_domain }} 2>&1 || echo "unresolvable"
       echo
       echo "=== *.apps.{{ ocp_cluster_name }}.{{ ocp_base_domain }} ==="
-      dig +short test.apps.{{ ocp_cluster_name }}.{{ ocp_base_domain }} 2>&1 || echo "dig not available"
+      getent hosts test.apps.{{ ocp_cluster_name }}.{{ ocp_base_domain }} 2>&1 || echo "unresolvable"
       echo
       echo "=== /etc/resolv.conf ==="
       cat /etc/resolv.conf
