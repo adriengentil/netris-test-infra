@@ -112,6 +112,21 @@
              | combine({'operator': {'aap': {'tokenSecret': {'name': 'osac-aap-api-token', 'key': 'token'}}}}, recursive=true)
              | to_nice_yaml(indent=2) }}
 
+- name: Enable bundled PostgreSQL for CI
+  block:
+    - name: Read values file for bundledPostgres patch
+      ansible.builtin.slurp:
+        src: "{{ osac_installer_dir }}/{{ osac_values_file }}"
+      register: _values_pg_raw
+
+    - name: Write values file with bundledPostgres enabled
+      ansible.builtin.copy:
+        dest: "{{ osac_installer_dir }}/{{ osac_values_file }}"
+        content: >-
+          {{ _values_pg_raw.content | b64decode | from_yaml
+             | combine({'bundledPostgres': {'enabled': true}}, recursive=true)
+             | to_nice_yaml(indent=2) }}
+
 - name: Disable bare-metal fulfillment operator
   ansible.builtin.blockinfile:
     path: "{{ osac_installer_dir }}/{{ osac_values_file }}"
