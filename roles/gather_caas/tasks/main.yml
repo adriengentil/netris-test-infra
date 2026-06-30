@@ -162,11 +162,23 @@
   no_log: true
   when: _gather_fulfillment_host.stdout | default('') | length > 0
 
-- name: Gather fulfillment clusters
+- name: Gather fulfillment clusters (secrets redacted)
   ansible.builtin.shell: |
     curl -sfk -H "Authorization: Bearer ${GATHER_TOKEN}" \
-      "https://{{ _gather_fulfillment_host.stdout }}/api/private/v1/clusters" \
-      2>&1 | python3 -m json.tool > {{ _gather_dir }}/caas/fulfillment-api/clusters.json 2>&1 \
+      "https://{{ _gather_fulfillment_host.stdout }}/api/private/v1/clusters" 2>/dev/null \
+      | python3 -c "
+    import sys, json
+    try:
+        data = json.load(sys.stdin)
+        for cluster in (data if isinstance(data, list) else data.get('clusters', data.get('items', [data]))):
+            params = cluster.get('spec', {}).get('template_parameters', {})
+            for key in ['pull_secret', 'ssh_private_key']:
+                if key in params:
+                    params[key] = {'value': '*** REDACTED ***'}
+        json.dump(data, sys.stdout, indent=4)
+    except Exception as e:
+        print(f'Error: {e}')
+    " > {{ _gather_dir }}/caas/fulfillment-api/clusters.json 2>&1 \
       || echo "unavailable" > {{ _gather_dir }}/caas/fulfillment-api/clusters.json
   environment:
     GATHER_TOKEN: "{{ _gather_sa_token.stdout }}"
