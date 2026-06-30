@@ -15,7 +15,9 @@
     - socat
     - assisted-installer
     - ocp
+    - ocp/operators
     - osac
+    - osac/prerequisites
     - dns
     - systemd
     - journal
@@ -270,6 +272,49 @@
   changed_when: false
   failed_when: false
 
+- name: Gather OCP node describe
+  ansible.builtin.shell: oc describe nodes > {{ _gather_dir }}/lab/ocp/nodes-describe 2>&1 || echo "unavailable" > {{ _gather_dir }}/lab/ocp/nodes-describe
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather OCP node resource usage
+  ansible.builtin.shell: oc adm top node > {{ _gather_dir }}/lab/ocp/top-nodes 2>&1 || echo "metrics unavailable" > {{ _gather_dir }}/lab/ocp/top-nodes
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather OCP pod resource usage
+  ansible.builtin.shell: oc adm top pod --all-namespaces --sum > {{ _gather_dir }}/lab/ocp/top-pods 2>&1 || echo "metrics unavailable" > {{ _gather_dir }}/lab/ocp/top-pods
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+# ── OCP prerequisite operators ──
+- name: Gather operator CSV status across namespaces
+  ansible.builtin.shell: oc get csv --all-namespaces -o wide > {{ _gather_dir }}/lab/ocp/operators/csvs 2>&1 || echo "unavailable" > {{ _gather_dir }}/lab/ocp/operators/csvs
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather operator subscriptions
+  ansible.builtin.shell: oc get subscriptions.operators.coreos.com --all-namespaces -o wide > {{ _gather_dir }}/lab/ocp/operators/subscriptions 2>&1 || echo "unavailable" > {{ _gather_dir }}/lab/ocp/operators/subscriptions
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather operator install plans
+  ansible.builtin.shell: oc get installplan --all-namespaces > {{ _gather_dir }}/lab/ocp/operators/installplans 2>&1 || echo "unavailable" > {{ _gather_dir }}/lab/ocp/operators/installplans
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
 # ── OSAC ──
 - name: Gather OSAC Helm releases
   ansible.builtin.shell: helm list -n {{ osac_namespace }} > {{ _gather_dir }}/lab/osac/helm-releases 2>&1 || echo "no helm releases" > {{ _gather_dir }}/lab/osac/helm-releases
@@ -306,6 +351,132 @@
       oc logs "$pod" -n {{ osac_namespace }} --tail=50 2>&1
       echo
     done > {{ _gather_dir }}/lab/osac/pod-logs 2>&1
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+# ── OSAC prerequisites (cert-manager, trust-manager, keycloak, AAP) ──
+- name: Gather cert-manager pods
+  ansible.builtin.shell: oc get pods -n cert-manager -o wide > {{ _gather_dir }}/lab/osac/prerequisites/cert-manager-pods 2>&1 || echo "namespace not found" > {{ _gather_dir }}/lab/osac/prerequisites/cert-manager-pods
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather cert-manager pod logs (last 50 lines per pod)
+  ansible.builtin.shell: |
+    for pod in $(oc get pods -n cert-manager --no-headers -o custom-columns=':metadata.name' 2>/dev/null); do
+      echo "=== $pod ==="
+      oc logs "$pod" -n cert-manager --tail=50 2>&1
+      echo
+    done > {{ _gather_dir }}/lab/osac/prerequisites/cert-manager-logs 2>&1
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather cert-manager certificates and issuers
+  ansible.builtin.shell: |
+    {
+      echo "=== Certificates ==="
+      oc get certificates --all-namespaces -o wide 2>&1
+      echo
+      echo "=== ClusterIssuers ==="
+      oc get clusterissuers -o wide 2>&1
+      echo
+      echo "=== Issuers ==="
+      oc get issuers --all-namespaces -o wide 2>&1
+    } > {{ _gather_dir }}/lab/osac/prerequisites/cert-manager-resources 2>&1
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather cert-manager events
+  ansible.builtin.shell: oc get events -n cert-manager --sort-by=.lastTimestamp > {{ _gather_dir }}/lab/osac/prerequisites/cert-manager-events 2>&1 || echo "no events" > {{ _gather_dir }}/lab/osac/prerequisites/cert-manager-events
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather trust-manager Bundle CRs
+  ansible.builtin.shell: |
+    {
+      echo "=== Bundles ==="
+      oc get bundles.trust.cert-manager.io --all-namespaces -o wide 2>&1
+      echo
+      echo "=== Bundle details ==="
+      oc describe bundles.trust.cert-manager.io --all-namespaces 2>&1
+    } > {{ _gather_dir }}/lab/osac/prerequisites/trust-manager-bundles 2>&1
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather trust-manager pod logs (last 50 lines)
+  ansible.builtin.shell: |
+    for pod in $(oc get pods -n cert-manager -l app.kubernetes.io/name=trust-manager --no-headers -o custom-columns=':metadata.name' 2>/dev/null); do
+      echo "=== $pod ==="
+      oc logs "$pod" -n cert-manager --tail=50 2>&1
+      echo
+    done > {{ _gather_dir }}/lab/osac/prerequisites/trust-manager-logs 2>&1
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather ca-bundle ConfigMap in OSAC namespace
+  ansible.builtin.shell: oc get configmap ca-bundle -n {{ osac_namespace }} -o yaml > {{ _gather_dir }}/lab/osac/prerequisites/ca-bundle-configmap 2>&1 || echo "ca-bundle ConfigMap not found" > {{ _gather_dir }}/lab/osac/prerequisites/ca-bundle-configmap
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather keycloak pods and status
+  ansible.builtin.shell: |
+    {
+      echo "=== Pods ==="
+      oc get pods -n keycloak -o wide 2>&1
+      echo
+      echo "=== Deployments ==="
+      oc get deployments -n keycloak 2>&1
+      echo
+      echo "=== StatefulSets ==="
+      oc get statefulsets -n keycloak 2>&1
+      echo
+      echo "=== Events ==="
+      oc get events -n keycloak --sort-by=.lastTimestamp 2>&1
+    } > {{ _gather_dir }}/lab/osac/prerequisites/keycloak-status 2>&1
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather AAP operator status
+  ansible.builtin.shell: |
+    {
+      echo "=== Pods ==="
+      oc get pods -n ansible-aap -o wide 2>&1
+      echo
+      echo "=== Deployments ==="
+      oc get deployments -n ansible-aap 2>&1
+      echo
+      echo "=== Events ==="
+      oc get events -n ansible-aap --sort-by=.lastTimestamp 2>&1
+    } > {{ _gather_dir }}/lab/osac/prerequisites/aap-status 2>&1
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather prerequisite namespace pods summary
+  ansible.builtin.shell: |
+    for ns in openshift-storage metallb-system multicluster-engine openshift-cnv cert-manager-operator keycloak ansible-aap; do
+      echo "=== $ns ==="
+      oc get pods -n "$ns" -o wide 2>&1 || echo "namespace not found"
+      echo
+    done > {{ _gather_dir }}/lab/osac/prerequisites/all-namespace-pods 2>&1
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
