@@ -118,21 +118,6 @@
   changed_when: false
   failed_when: false
 
-- name: Gather discovery VM states
-  ansible.builtin.shell: |
-    for pattern in {{ caas_discovery_vm_patterns | join(' ') }}; do
-      vm=$(virsh list --all --name 2>/dev/null | grep "$pattern" | head -1)
-      if [ -n "$vm" ]; then
-        echo "=== $vm ==="
-        virsh domstate "$vm" 2>&1
-        echo "vCPUs: $(virsh vcpucount "$vm" --current 2>/dev/null || echo unknown)"
-        echo "Memory: $(virsh dommemstat "$vm" 2>/dev/null | awk '/actual/{print int($2/1024) " MB"}')"
-        virsh domblklist "$vm" 2>&1
-        echo
-      fi
-    done > {{ _gather_dir }}/caas/discovery/vms 2>&1
-  changed_when: false
-  failed_when: false
 
 # ── Fulfillment API ──
 - name: Get fulfillment API URL for gather

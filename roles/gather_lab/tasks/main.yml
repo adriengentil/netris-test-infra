@@ -83,6 +83,17 @@
   changed_when: false
   failed_when: false
 
+- name: Gather VM XML dumps
+  ansible.builtin.shell: |
+    for vm in $(virsh list --all --name 2>/dev/null); do
+      [ -z "$vm" ] && continue
+      echo "=== $vm ==="
+      virsh dumpxml "$vm" 2>&1
+      echo
+    done > {{ _gather_dir }}/lab/libvirt/vm-xml-dump 2>&1
+  changed_when: false
+  failed_when: false
+
 # ── K3s ──
 - name: Gather K3s nodes
   ansible.builtin.shell: kubectl get nodes -o wide > {{ _gather_dir }}/lab/k3s/nodes 2>&1
