@@ -1,7 +1,8 @@
 .PHONY: deploy setup deploy-lab deploy-ocp deploy-osac setup-caas deploy-caas \
        deploy-vmaas deploy-bmaas \
        destroy destroy-osac destroy-ocp destroy-caas destroy-vmaas destroy-bmaas \
-       connectivity prep-osac run-osac-setup post-osac vendor-update lint gather
+       connectivity prep-osac run-osac-setup post-osac vendor-update lint gather \
+       cleanup-dns
 
 EXTRA_VARS ?=
 ANSIBLE_EXTRA = $(if $(EXTRA_VARS),-e '$(EXTRA_VARS)')
@@ -89,3 +90,6 @@ lint:
 
 gather:
 	ansible-playbook playbooks/gather.yml $(ANSIBLE_EXTRA)
+
+cleanup-dns:
+	ansible-playbook playbooks/cleanup-dns.yml $(ANSIBLE_EXTRA)
