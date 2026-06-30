@@ -9,7 +9,6 @@
     - hosting-cluster
     - fulfillment-api
     - hosted-cluster
-    - discovery
 
 # ── Hosting cluster (OCP SNO running OSAC) ──
 - name: Gather CaaS catalogs
@@ -89,35 +88,33 @@
   changed_when: false
   failed_when: false
 
-# ── Discovery (agents, VMs, InfraEnv) ──
 - name: Gather InfraEnv
-  ansible.builtin.shell: oc get infraenv -n {{ caas_discovery_infraenv_namespace }} -o wide > {{ _gather_dir }}/caas/discovery/infraenv 2>&1 || echo "no InfraEnv found" > {{ _gather_dir }}/caas/discovery/infraenv
+  ansible.builtin.shell: oc get infraenv -n {{ caas_discovery_infraenv_namespace }} -o wide > {{ _gather_dir }}/caas/hosting-cluster/infraenv 2>&1 || echo "no InfraEnv found" > {{ _gather_dir }}/caas/hosting-cluster/infraenv
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
 - name: Gather InfraEnv details
-  ansible.builtin.shell: oc describe infraenv -n {{ caas_discovery_infraenv_namespace }} > {{ _gather_dir }}/caas/discovery/infraenv-describe 2>&1 || echo "no InfraEnv found" > {{ _gather_dir }}/caas/discovery/infraenv-describe
+  ansible.builtin.shell: oc describe infraenv -n {{ caas_discovery_infraenv_namespace }} > {{ _gather_dir }}/caas/hosting-cluster/infraenv-describe 2>&1 || echo "no InfraEnv found" > {{ _gather_dir }}/caas/hosting-cluster/infraenv-describe
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
 - name: Gather Agents
-  ansible.builtin.shell: oc get agent -n {{ caas_agent_namespace }} -o wide --show-labels > {{ _gather_dir }}/caas/discovery/agents 2>&1 || echo "no agents found" > {{ _gather_dir }}/caas/discovery/agents
+  ansible.builtin.shell: oc get agent -n {{ caas_agent_namespace }} -o wide --show-labels > {{ _gather_dir }}/caas/hosting-cluster/agents 2>&1 || echo "no agents found" > {{ _gather_dir }}/caas/hosting-cluster/agents
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
 - name: Gather Agent details
-  ansible.builtin.shell: oc describe agent -n {{ caas_agent_namespace }} > {{ _gather_dir }}/caas/discovery/agents-describe 2>&1 || echo "no agents found" > {{ _gather_dir }}/caas/discovery/agents-describe
+  ansible.builtin.shell: oc describe agent -n {{ caas_agent_namespace }} > {{ _gather_dir }}/caas/hosting-cluster/agents-describe 2>&1 || echo "no agents found" > {{ _gather_dir }}/caas/hosting-cluster/agents-describe
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
-
 
 # ── Fulfillment API ──
 - name: Get fulfillment API URL for gather
