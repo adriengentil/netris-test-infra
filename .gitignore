@@ -8,3 +8,4 @@ config
 pod.yml
 configmap.yml
 /root/pull-secret
+logs/
