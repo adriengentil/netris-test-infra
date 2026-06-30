@@ -1,0 +1,234 @@
+---
+- name: Create caas gather directory
+  ansible.builtin.file:
+    path: "{{ _gather_dir }}/caas"
+    state: directory
+    mode: "0755"
+  failed_when: false
+
+# ── CaaS K8s resources ──
+- name: Gather InfraEnv status
+  ansible.builtin.shell: oc get infraenv -n {{ caas_discovery_infraenv_namespace }} -o wide > {{ _gather_dir }}/caas/infraenv 2>&1 || echo "no InfraEnv found" > {{ _gather_dir }}/caas/infraenv
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather InfraEnv conditions
+  ansible.builtin.shell: |
+    oc get infraenv -n {{ caas_discovery_infraenv_namespace }} -o json 2>/dev/null | python3 -c "
+    import sys, json
+    try:
+        data = json.load(sys.stdin)
+        for item in data.get('items', []):
+            print(f\"InfraEnv: {item['metadata']['name']}\")
+            print(f\"  ISO URL: {item.get('status', {}).get('isoDownloadURL', 'not available')}\")
+            for c in item.get('status', {}).get('conditions', []):
+                print(f\"  {c['type']}: {c['status']} - {c.get('message', '')}\")
+            print()
+    except Exception as e:
+        print(f'Error: {e}')
+    " > {{ _gather_dir }}/caas/infraenv-conditions 2>&1
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather Agent CRs
+  ansible.builtin.shell: oc get agent -n {{ caas_agent_namespace }} -o wide --show-labels > {{ _gather_dir }}/caas/agents 2>&1 || echo "no agents found" > {{ _gather_dir }}/caas/agents
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather Agent conditions and inventory
+  ansible.builtin.shell: |
+    oc get agent -n {{ caas_agent_namespace }} -o json 2>/dev/null | python3 -c "
+    import sys, json
+    try:
+        data = json.load(sys.stdin)
+        for a in data.get('items', []):
+            name = a['metadata']['name']
+            status = a.get('status', {})
+            hostname = status.get('inventory', {}).get('hostname', 'unknown')
+            role = a.get('spec', {}).get('role', 'unset')
+            approved = a.get('spec', {}).get('approved', False)
+            print(f'Agent: {name} (hostname: {hostname}, role: {role}, approved: {approved})')
+            for c in status.get('conditions', []):
+                print(f'  {c[\"type\"]}: {c[\"status\"]} - {c.get(\"message\", \"\")}')
+            inv = status.get('inventory', {})
+            print(f'  CPU: {inv.get(\"cpu\", {}).get(\"count\", \"?\")} cores')
+            print(f'  Memory: {round(inv.get(\"memory\", {}).get(\"physicalBytes\", 0) / 1024**3, 1)} GB')
+            disks = inv.get('disks', [])
+            print(f'  Disks: {len(disks)}')
+            nics = inv.get('interfaces', [])
+            for nic in nics:
+                print(f'  NIC: {nic.get(\"name\", \"?\")} mac={nic.get(\"macAddress\", \"?\")} ipv4={nic.get(\"ipV4Addresses\", [])}')
+            print()
+    except Exception as e:
+        print(f'Error: {e}')
+    " > {{ _gather_dir }}/caas/agent-details 2>&1
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather discovery VM states
+  ansible.builtin.shell: |
+    for pattern in {{ caas_discovery_vm_patterns | join(' ') }}; do
+      vm=$(virsh list --all --name 2>/dev/null | grep "$pattern" | head -1)
+      if [ -n "$vm" ]; then
+        echo "=== $vm ==="
+        virsh domstate "$vm" 2>&1
+        echo "vCPUs: $(virsh vcpucount "$vm" --current 2>/dev/null || echo unknown)"
+        echo "Memory: $(virsh dommemstat "$vm" 2>/dev/null | awk '/actual/{print int($2/1024) " MB"}')"
+        virsh domblklist "$vm" 2>&1
+        echo
+      fi
+    done > {{ _gather_dir }}/caas/discovery-vms 2>&1
+  changed_when: false
+  failed_when: false
+
+- name: Gather CaaS events
+  ansible.builtin.shell: oc get events -n {{ caas_discovery_infraenv_namespace }} --sort-by=.lastTimestamp > {{ _gather_dir }}/caas/events 2>&1 || echo "no events" > {{ _gather_dir }}/caas/events
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+# ── osac CLI ──
+- name: Gather osac clusters
+  ansible.builtin.shell: osac get clusters > {{ _gather_dir }}/caas/clusters 2>&1 || echo "osac CLI unavailable" > {{ _gather_dir }}/caas/clusters
+  changed_when: false
+  failed_when: false
+
+- name: Gather osac host types
+  ansible.builtin.shell: osac get host_types > {{ _gather_dir }}/caas/host-types 2>&1 || echo "osac CLI unavailable" > {{ _gather_dir }}/caas/host-types
+  changed_when: false
+  failed_when: false
+
+- name: Gather osac cluster templates
+  ansible.builtin.shell: osac get clustertemplates > {{ _gather_dir }}/caas/cluster-templates 2>&1 || echo "osac CLI unavailable" > {{ _gather_dir }}/caas/cluster-templates
+  changed_when: false
+  failed_when: false
+
+# ── Fulfillment API ──
+- name: Gather fulfillment service routes
+  ansible.builtin.shell: oc get route -n {{ osac_namespace }} | grep -i fulfillment > {{ _gather_dir }}/caas/fulfillment-routes 2>&1 || echo "no fulfillment routes" > {{ _gather_dir }}/caas/fulfillment-routes
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Get fulfillment API URL for gather
+  ansible.builtin.shell:
+    cmd: oc get route fulfillment-internal-api -n {{ osac_namespace }} -o jsonpath='{.status.ingress[0].host}'
+  environment:
+    KUBECONFIG: /root/.kube/config
+  register: _gather_fulfillment_host
+  changed_when: false
+  failed_when: false
+
+- name: Get service account token for gather
+  ansible.builtin.shell:
+    cmd: oc create token -n {{ osac_namespace }} admin
+  environment:
+    KUBECONFIG: /root/.kube/config
+  register: _gather_sa_token
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Gather fulfillment host types
+  ansible.builtin.shell: >-
+    curl -sfk -H 'Authorization: Bearer {{ _gather_sa_token.stdout }}'
+    https://{{ _gather_fulfillment_host.stdout }}/api/private/v1/host_types
+    2>&1 | python3 -m json.tool > {{ _gather_dir }}/caas/fulfillment-host-types.json 2>&1
+    || echo "unavailable" > {{ _gather_dir }}/caas/fulfillment-host-types.json
+  changed_when: false
+  failed_when: false
+  when: _gather_fulfillment_host.stdout | default('') | length > 0
+
+- name: Gather fulfillment cluster catalog items
+  ansible.builtin.shell: >-
+    curl -sfk -H 'Authorization: Bearer {{ _gather_sa_token.stdout }}'
+    https://{{ _gather_fulfillment_host.stdout }}/api/private/v1/cluster_catalog_items
+    2>&1 | python3 -m json.tool > {{ _gather_dir }}/caas/fulfillment-catalog-items.json 2>&1
+    || echo "unavailable" > {{ _gather_dir }}/caas/fulfillment-catalog-items.json
+  changed_when: false
+  failed_when: false
+  when: _gather_fulfillment_host.stdout | default('') | length > 0
+
+- name: Gather fulfillment clusters
+  ansible.builtin.shell: >-
+    curl -sfk -H 'Authorization: Bearer {{ _gather_sa_token.stdout }}'
+    https://{{ _gather_fulfillment_host.stdout }}/api/private/v1/clusters
+    2>&1 | python3 -m json.tool > {{ _gather_dir }}/caas/fulfillment-clusters.json 2>&1
+    || echo "unavailable" > {{ _gather_dir }}/caas/fulfillment-clusters.json
+  changed_when: false
+  failed_when: false
+  when: _gather_fulfillment_host.stdout | default('') | length > 0
+
+# ── CaaS resource YAMLs ──
+- name: Gather CaaS catalogs YAML
+  ansible.builtin.shell: oc get catalogs.osac.redhat.com --all-namespaces -o yaml > {{ _gather_dir }}/caas/catalogs.yaml 2>&1 || echo "no catalogs" > {{ _gather_dir }}/caas/catalogs.yaml
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather CaaS templates YAML
+  ansible.builtin.shell: oc get templates.osac.redhat.com --all-namespaces -o yaml > {{ _gather_dir }}/caas/templates.yaml 2>&1 || echo "no templates" > {{ _gather_dir }}/caas/templates.yaml
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather CaaS clusters YAML
+  ansible.builtin.shell: oc get clusters.osac.redhat.com --all-namespaces -o yaml > {{ _gather_dir }}/caas/clusters.yaml 2>&1 || echo "no clusters" > {{ _gather_dir }}/caas/clusters.yaml
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather CaaS hosttypes YAML
+  ansible.builtin.shell: oc get hosttypes.osac.redhat.com --all-namespaces -o yaml > {{ _gather_dir }}/caas/hosttypes.yaml 2>&1 || echo "no hosttypes" > {{ _gather_dir }}/caas/hosttypes.yaml
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather CaaS agents YAML
+  ansible.builtin.shell: oc get agents.agent-install.openshift.io -n {{ caas_agent_namespace }} -o yaml > {{ _gather_dir }}/caas/agents.yaml 2>&1 || echo "no agents" > {{ _gather_dir }}/caas/agents.yaml
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather CaaS agentclusters YAML
+  ansible.builtin.shell: oc get agentclusters.capi-provider.agent-install.openshift.io --all-namespaces -o yaml > {{ _gather_dir }}/caas/agentclusters.yaml 2>&1 || echo "no agentclusters" > {{ _gather_dir }}/caas/agentclusters.yaml
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather CaaS agentmachines YAML
+  ansible.builtin.shell: oc get agentmachines.capi-provider.agent-install.openshift.io --all-namespaces -o yaml > {{ _gather_dir }}/caas/agentmachines.yaml 2>&1 || echo "no agentmachines" > {{ _gather_dir }}/caas/agentmachines.yaml
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather HostedClusters YAML
+  ansible.builtin.shell: oc get hostedclusters.hypershift.openshift.io --all-namespaces -o yaml > {{ _gather_dir }}/caas/hostedclusters.yaml 2>&1 || echo "no hostedclusters" > {{ _gather_dir }}/caas/hostedclusters.yaml
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather HostedControlPlanes YAML
+  ansible.builtin.shell: oc get hostedcontrolplanes.hypershift.openshift.io --all-namespaces -o yaml > {{ _gather_dir }}/caas/hostedcontrolplanes.yaml 2>&1 || echo "no hostedcontrolplanes" > {{ _gather_dir }}/caas/hostedcontrolplanes.yaml
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
