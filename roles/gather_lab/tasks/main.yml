@@ -184,15 +184,16 @@
 
 - name: Gather DNS resolution test
   ansible.builtin.shell: |
-    echo "=== api.{{ ocp_cluster_name }}.{{ ocp_base_domain }} ==="
-    dig +short api.{{ ocp_cluster_name }}.{{ ocp_base_domain }} 2>&1 || echo "dig not available"
-    echo
-    echo "=== *.apps.{{ ocp_cluster_name }}.{{ ocp_base_domain }} ==="
-    dig +short test.apps.{{ ocp_cluster_name }}.{{ ocp_base_domain }} 2>&1 || echo "dig not available"
-    echo
-    echo "=== /etc/resolv.conf ==="
-    cat /etc/resolv.conf
-  > {{ _gather_dir }}/lab/dns/resolution-test 2>&1
+    {
+      echo "=== api.{{ ocp_cluster_name }}.{{ ocp_base_domain }} ==="
+      dig +short api.{{ ocp_cluster_name }}.{{ ocp_base_domain }} 2>&1 || echo "dig not available"
+      echo
+      echo "=== *.apps.{{ ocp_cluster_name }}.{{ ocp_base_domain }} ==="
+      dig +short test.apps.{{ ocp_cluster_name }}.{{ ocp_base_domain }} 2>&1 || echo "dig not available"
+      echo
+      echo "=== /etc/resolv.conf ==="
+      cat /etc/resolv.conf
+    } > {{ _gather_dir }}/lab/dns/resolution-test 2>&1
   changed_when: false
   failed_when: false
 
