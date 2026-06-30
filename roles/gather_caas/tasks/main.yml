@@ -22,7 +22,6 @@
         data = json.load(sys.stdin)
         for item in data.get('items', []):
             print(f\"InfraEnv: {item['metadata']['name']}\")
-            print(f\"  ISO URL: {item.get('status', {}).get('isoDownloadURL', 'not available')}\")
             for c in item.get('status', {}).get('conditions', []):
                 print(f\"  {c['type']}: {c['status']} - {c.get('message', '')}\")
             print()
@@ -140,95 +139,229 @@
   no_log: true
 
 - name: Gather fulfillment host types
-  ansible.builtin.shell: >-
-    curl -sfk -H 'Authorization: Bearer {{ _gather_sa_token.stdout }}'
-    https://{{ _gather_fulfillment_host.stdout }}/api/private/v1/host_types
-    2>&1 | python3 -m json.tool > {{ _gather_dir }}/caas/fulfillment-host-types.json 2>&1
-    || echo "unavailable" > {{ _gather_dir }}/caas/fulfillment-host-types.json
+  ansible.builtin.shell: |
+    curl -sfk -H "Authorization: Bearer ${GATHER_TOKEN}" \
+      "https://{{ _gather_fulfillment_host.stdout }}/api/private/v1/host_types" \
+      2>&1 | python3 -m json.tool > {{ _gather_dir }}/caas/fulfillment-host-types.json 2>&1 \
+      || echo "unavailable" > {{ _gather_dir }}/caas/fulfillment-host-types.json
+  environment:
+    GATHER_TOKEN: "{{ _gather_sa_token.stdout }}"
   changed_when: false
   failed_when: false
+  no_log: true
   when: _gather_fulfillment_host.stdout | default('') | length > 0
 
 - name: Gather fulfillment cluster catalog items
-  ansible.builtin.shell: >-
-    curl -sfk -H 'Authorization: Bearer {{ _gather_sa_token.stdout }}'
-    https://{{ _gather_fulfillment_host.stdout }}/api/private/v1/cluster_catalog_items
-    2>&1 | python3 -m json.tool > {{ _gather_dir }}/caas/fulfillment-catalog-items.json 2>&1
-    || echo "unavailable" > {{ _gather_dir }}/caas/fulfillment-catalog-items.json
+  ansible.builtin.shell: |
+    curl -sfk -H "Authorization: Bearer ${GATHER_TOKEN}" \
+      "https://{{ _gather_fulfillment_host.stdout }}/api/private/v1/cluster_catalog_items" \
+      2>&1 | python3 -m json.tool > {{ _gather_dir }}/caas/fulfillment-catalog-items.json 2>&1 \
+      || echo "unavailable" > {{ _gather_dir }}/caas/fulfillment-catalog-items.json
+  environment:
+    GATHER_TOKEN: "{{ _gather_sa_token.stdout }}"
   changed_when: false
   failed_when: false
+  no_log: true
   when: _gather_fulfillment_host.stdout | default('') | length > 0
 
 - name: Gather fulfillment clusters
-  ansible.builtin.shell: >-
-    curl -sfk -H 'Authorization: Bearer {{ _gather_sa_token.stdout }}'
-    https://{{ _gather_fulfillment_host.stdout }}/api/private/v1/clusters
-    2>&1 | python3 -m json.tool > {{ _gather_dir }}/caas/fulfillment-clusters.json 2>&1
-    || echo "unavailable" > {{ _gather_dir }}/caas/fulfillment-clusters.json
+  ansible.builtin.shell: |
+    curl -sfk -H "Authorization: Bearer ${GATHER_TOKEN}" \
+      "https://{{ _gather_fulfillment_host.stdout }}/api/private/v1/clusters" \
+      2>&1 | python3 -m json.tool > {{ _gather_dir }}/caas/fulfillment-clusters.json 2>&1 \
+      || echo "unavailable" > {{ _gather_dir }}/caas/fulfillment-clusters.json
+  environment:
+    GATHER_TOKEN: "{{ _gather_sa_token.stdout }}"
   changed_when: false
   failed_when: false
+  no_log: true
   when: _gather_fulfillment_host.stdout | default('') | length > 0
 
-# ── CaaS resource YAMLs ──
-- name: Gather CaaS catalogs YAML
-  ansible.builtin.shell: oc get catalogs.osac.redhat.com --all-namespaces -o yaml > {{ _gather_dir }}/caas/catalogs.yaml 2>&1 || echo "no catalogs" > {{ _gather_dir }}/caas/catalogs.yaml
+# ── CaaS resource status (no secrets) ──
+- name: Gather CaaS catalogs
+  ansible.builtin.shell: oc get catalogs.osac.redhat.com --all-namespaces -o wide > {{ _gather_dir }}/caas/catalogs 2>&1 || echo "no catalogs" > {{ _gather_dir }}/caas/catalogs
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
-- name: Gather CaaS templates YAML
-  ansible.builtin.shell: oc get templates.osac.redhat.com --all-namespaces -o yaml > {{ _gather_dir }}/caas/templates.yaml 2>&1 || echo "no templates" > {{ _gather_dir }}/caas/templates.yaml
+- name: Gather CaaS templates
+  ansible.builtin.shell: oc get templates.osac.redhat.com --all-namespaces -o wide > {{ _gather_dir }}/caas/templates 2>&1 || echo "no templates" > {{ _gather_dir }}/caas/templates
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
-- name: Gather CaaS clusters YAML
-  ansible.builtin.shell: oc get clusters.osac.redhat.com --all-namespaces -o yaml > {{ _gather_dir }}/caas/clusters.yaml 2>&1 || echo "no clusters" > {{ _gather_dir }}/caas/clusters.yaml
+- name: Gather CaaS clusters
+  ansible.builtin.shell: oc get clusters.osac.redhat.com --all-namespaces -o wide > {{ _gather_dir }}/caas/clusters-cr 2>&1 || echo "no clusters" > {{ _gather_dir }}/caas/clusters-cr
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
-- name: Gather CaaS hosttypes YAML
-  ansible.builtin.shell: oc get hosttypes.osac.redhat.com --all-namespaces -o yaml > {{ _gather_dir }}/caas/hosttypes.yaml 2>&1 || echo "no hosttypes" > {{ _gather_dir }}/caas/hosttypes.yaml
+- name: Gather CaaS hosttypes
+  ansible.builtin.shell: oc get hosttypes.osac.redhat.com --all-namespaces -o wide > {{ _gather_dir }}/caas/hosttypes 2>&1 || echo "no hosttypes" > {{ _gather_dir }}/caas/hosttypes
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
-- name: Gather CaaS agents YAML
-  ansible.builtin.shell: oc get agents.agent-install.openshift.io -n {{ caas_agent_namespace }} -o yaml > {{ _gather_dir }}/caas/agents.yaml 2>&1 || echo "no agents" > {{ _gather_dir }}/caas/agents.yaml
+- name: Gather CaaS agents
+  ansible.builtin.shell: oc get agents.agent-install.openshift.io -n {{ caas_agent_namespace }} -o wide > {{ _gather_dir }}/caas/agents-cr 2>&1 || echo "no agents" > {{ _gather_dir }}/caas/agents-cr
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
-- name: Gather CaaS agentclusters YAML
-  ansible.builtin.shell: oc get agentclusters.capi-provider.agent-install.openshift.io --all-namespaces -o yaml > {{ _gather_dir }}/caas/agentclusters.yaml 2>&1 || echo "no agentclusters" > {{ _gather_dir }}/caas/agentclusters.yaml
+- name: Gather CaaS agentclusters
+  ansible.builtin.shell: oc get agentclusters.capi-provider.agent-install.openshift.io --all-namespaces -o wide > {{ _gather_dir }}/caas/agentclusters 2>&1 || echo "no agentclusters" > {{ _gather_dir }}/caas/agentclusters
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
-- name: Gather CaaS agentmachines YAML
-  ansible.builtin.shell: oc get agentmachines.capi-provider.agent-install.openshift.io --all-namespaces -o yaml > {{ _gather_dir }}/caas/agentmachines.yaml 2>&1 || echo "no agentmachines" > {{ _gather_dir }}/caas/agentmachines.yaml
+- name: Gather CaaS agentmachines
+  ansible.builtin.shell: oc get agentmachines.capi-provider.agent-install.openshift.io --all-namespaces -o wide > {{ _gather_dir }}/caas/agentmachines 2>&1 || echo "no agentmachines" > {{ _gather_dir }}/caas/agentmachines
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
-- name: Gather HostedClusters YAML
-  ansible.builtin.shell: oc get hostedclusters.hypershift.openshift.io --all-namespaces -o yaml > {{ _gather_dir }}/caas/hostedclusters.yaml 2>&1 || echo "no hostedclusters" > {{ _gather_dir }}/caas/hostedclusters.yaml
+- name: Gather HostedClusters
+  ansible.builtin.shell: oc get hostedclusters.hypershift.openshift.io --all-namespaces -o wide > {{ _gather_dir }}/caas/hostedclusters 2>&1 || echo "no hostedclusters" > {{ _gather_dir }}/caas/hostedclusters
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
-- name: Gather HostedControlPlanes YAML
-  ansible.builtin.shell: oc get hostedcontrolplanes.hypershift.openshift.io --all-namespaces -o yaml > {{ _gather_dir }}/caas/hostedcontrolplanes.yaml 2>&1 || echo "no hostedcontrolplanes" > {{ _gather_dir }}/caas/hostedcontrolplanes.yaml
+- name: Gather HostedControlPlanes
+  ansible.builtin.shell: oc get hostedcontrolplanes.hypershift.openshift.io --all-namespaces -o wide > {{ _gather_dir }}/caas/hostedcontrolplanes 2>&1 || echo "no hostedcontrolplanes" > {{ _gather_dir }}/caas/hostedcontrolplanes
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
+  failed_when: false
+
+# ── CaaS resource descriptions (status/conditions without secrets) ──
+- name: Gather CaaS resource descriptions
+  ansible.builtin.shell: |
+    for resource in \
+      catalogs.osac.redhat.com \
+      templates.osac.redhat.com \
+      clusters.osac.redhat.com \
+      hosttypes.osac.redhat.com; do
+      echo "=== $resource ==="
+      oc describe "$resource" --all-namespaces 2>&1 || echo "not found"
+      echo
+    done > {{ _gather_dir }}/caas/resource-descriptions 2>&1
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather Agent descriptions
+  ansible.builtin.shell: oc describe agents.agent-install.openshift.io -n {{ caas_agent_namespace }} > {{ _gather_dir }}/caas/agent-descriptions 2>&1 || echo "no agents" > {{ _gather_dir }}/caas/agent-descriptions
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather HostedCluster descriptions
+  ansible.builtin.shell: oc describe hostedclusters.hypershift.openshift.io --all-namespaces > {{ _gather_dir }}/caas/hostedcluster-descriptions 2>&1 || echo "no hostedclusters" > {{ _gather_dir }}/caas/hostedcluster-descriptions
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+# ── Installed cluster API ──
+- name: Get installed cluster namespace
+  ansible.builtin.shell:
+    cmd: >-
+      oc get hostedclusters.hypershift.openshift.io --all-namespaces -o jsonpath='{.items[0].metadata.namespace}-{.items[0].metadata.name}'
+  environment:
+    KUBECONFIG: /root/.kube/config
+  register: _hc_ns_name
+  changed_when: false
+  failed_when: false
+
+- name: Extract installed cluster kubeconfig
+  ansible.builtin.shell: |
+    HC_NS_NAME="{{ _hc_ns_name.stdout }}"
+    if [ -z "${HC_NS_NAME}" ] || [ "${HC_NS_NAME}" = "-" ]; then
+      echo "no hostedcluster found" > {{ _gather_dir }}/caas/installed-cluster-kubeconfig-status
+      exit 0
+    fi
+    SECRET_NAME=$(oc get hostedclusters.hypershift.openshift.io --all-namespaces -o jsonpath='{.items[0].status.kubeconfig.name}' 2>/dev/null)
+    HC_NS=$(oc get hostedclusters.hypershift.openshift.io --all-namespaces -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null)
+    if [ -z "${SECRET_NAME}" ]; then
+      echo "kubeconfig secret not available yet" > {{ _gather_dir }}/caas/installed-cluster-kubeconfig-status
+      exit 0
+    fi
+    oc get secret "${SECRET_NAME}" -n "${HC_NS}" -o jsonpath='{.data.kubeconfig}' 2>/dev/null \
+      | base64 -d > /tmp/caas-installed-kubeconfig 2>&1
+    echo "kubeconfig extracted from secret ${SECRET_NAME} in ${HC_NS}" > {{ _gather_dir }}/caas/installed-cluster-kubeconfig-status
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Create installed cluster gather subdirectory
+  ansible.builtin.file:
+    path: "{{ _gather_dir }}/caas/installed-cluster"
+    state: directory
+    mode: "0755"
+  failed_when: false
+
+- name: Gather installed cluster nodes
+  ansible.builtin.shell: oc get nodes -o wide > {{ _gather_dir }}/caas/installed-cluster/nodes 2>&1 || echo "cluster not reachable" > {{ _gather_dir }}/caas/installed-cluster/nodes
+  environment:
+    KUBECONFIG: /tmp/caas-installed-kubeconfig
+  changed_when: false
+  failed_when: false
+  when: _hc_ns_name.stdout | default('') | length > 1
+
+- name: Gather installed cluster version
+  ansible.builtin.shell: oc get clusterversion > {{ _gather_dir }}/caas/installed-cluster/cluster-version 2>&1 || echo "unavailable" > {{ _gather_dir }}/caas/installed-cluster/cluster-version
+  environment:
+    KUBECONFIG: /tmp/caas-installed-kubeconfig
+  changed_when: false
+  failed_when: false
+  when: _hc_ns_name.stdout | default('') | length > 1
+
+- name: Gather installed cluster operators
+  ansible.builtin.shell: oc get clusteroperators > {{ _gather_dir }}/caas/installed-cluster/cluster-operators 2>&1 || echo "unavailable" > {{ _gather_dir }}/caas/installed-cluster/cluster-operators
+  environment:
+    KUBECONFIG: /tmp/caas-installed-kubeconfig
+  changed_when: false
+  failed_when: false
+  when: _hc_ns_name.stdout | default('') | length > 1
+
+- name: Gather installed cluster pods (all namespaces)
+  ansible.builtin.shell: oc get pods --all-namespaces -o wide > {{ _gather_dir }}/caas/installed-cluster/pods-all 2>&1 || echo "unavailable" > {{ _gather_dir }}/caas/installed-cluster/pods-all
+  environment:
+    KUBECONFIG: /tmp/caas-installed-kubeconfig
+  changed_when: false
+  failed_when: false
+  when: _hc_ns_name.stdout | default('') | length > 1
+
+- name: Gather installed cluster events
+  ansible.builtin.shell: oc get events --all-namespaces --sort-by=.lastTimestamp > {{ _gather_dir }}/caas/installed-cluster/events 2>&1 || echo "unavailable" > {{ _gather_dir }}/caas/installed-cluster/events
+  environment:
+    KUBECONFIG: /tmp/caas-installed-kubeconfig
+  changed_when: false
+  failed_when: false
+  when: _hc_ns_name.stdout | default('') | length > 1
+
+- name: Gather installed cluster machines
+  ansible.builtin.shell: oc get machines.cluster.x-k8s.io --all-namespaces -o wide > {{ _gather_dir }}/caas/installed-cluster/machines 2>&1 || echo "no machines" > {{ _gather_dir }}/caas/installed-cluster/machines
+  environment:
+    KUBECONFIG: /tmp/caas-installed-kubeconfig
+  changed_when: false
+  failed_when: false
+  when: _hc_ns_name.stdout | default('') | length > 1
+
+- name: Clean up installed cluster kubeconfig
+  ansible.builtin.file:
+    path: /tmp/caas-installed-kubeconfig
+    state: absent
   failed_when: false
