@@ -217,14 +217,6 @@
         cmd: rm -f {{ _deploy }}etc/NetworkManager/system-connections/*.nmconnection
       changed_when: true
 
-    - name: Prevent NM auto-connections for ens4/ens5
-      ansible.builtin.copy:
-        content: |
-          [main]
-          no-auto-default=ens4,ens5
-        dest: "{{ _deploy }}etc/NetworkManager/conf.d/99-snapshot-no-auto.conf"
-        mode: "0644"
-
     - name: Ensure NM system-connections directory exists
       ansible.builtin.file:
         path: "{{ _deploy }}etc/NetworkManager/system-connections"
@@ -288,6 +280,12 @@
       ansible.builtin.file:
         path: "{{ _deploy }}var/lib/ovn-ic/etc"
         state: absent
+
+    - name: Create .autorelabel to fix SELinux labels on boot
+      ansible.builtin.file:
+        path: /tmp/flavor-mount/.autorelabel
+        state: touch
+        mode: "0644"
 
   always:
     - name: Unmount ostree partition
