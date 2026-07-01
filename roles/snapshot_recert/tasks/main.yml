@@ -154,6 +154,11 @@
           {{ _ssh_cmd }} "sudo podman stop etcd-recert 2>/dev/null; sudo podman rm etcd-recert 2>/dev/null"
       failed_when: false
 
+- name: Fix pull-secret on disk (recert writes path instead of content)
+  ansible.builtin.shell:
+    cmd: >-
+      {{ _ssh_cmd }} "sudo cp /tmp/crypto/pull-secret /var/lib/kubelet/config.json"
+
 - name: Force static pod recreation by touching manifests
   ansible.builtin.shell:
     cmd: >-
