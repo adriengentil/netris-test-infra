@@ -25,6 +25,8 @@
     name:
       - podman
       - dnsmasq
+      - zstd
+      - pigz
     state: present
 
 - name: Install aicli and awscli
@@ -74,3 +76,7 @@
   environment:
     GOPATH: /root/go
     GOCACHE: /root/.cache/go-build
+
+- name: Cache snapshot flavor image
+  ansible.builtin.include_role:
+    name: snapshot_pull
