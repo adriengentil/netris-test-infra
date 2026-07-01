@@ -12,9 +12,14 @@ roles/                          # Ansible roles (each has tasks/main.yml)
   lab_deploy/                   # Orchestrates netris-lab submodule roles
   vm_resize/                    # Resize hgx-00 VM for OCP (virsh)
   netris_configure/             # Create VPC/VNet/Subnet/NAT via Netris API
-  assisted_service/             # Deploy Assisted Installer + dnsmasq DNS
+  ocp_dns/                      # Route 53 + dnsmasq DNS for OCP
+  assisted_service/             # Deploy Assisted Installer (includes ocp_dns)
   ocp_install/                  # Install OCP SNO via aicli
   osac_install/                 # Deploy OSAC (Helm + setup.sh)
+  snapshot_pull/                # Pull + cache flavor OCI image (skopeo)
+  snapshot_restore/             # CoW disk overlays, qemu-nbd pre-boot config, boot VM
+  snapshot_recert/              # Recert certificates + cluster identity, wait for health
+  osac_refresh/                 # Refresh OSAC via refresh-after-snapshot.py
   caas_discovery/               # Boot discovery VMs with InfraEnv ISO
   caas_setup/                   # Label agents, register host type, create cluster
   destroy/                      # Teardown everything
@@ -29,11 +34,13 @@ vendor/                         # Vendored Ansible collections
 ## Commands
 
 ```
-make deploy                 # Full pipeline: deploy-lab + deploy-ocp + deploy-osac
-make setup                  # Install prerequisites, cache images, install OCP/OSAC tools
+make deploy                 # Full pipeline: deploy-lab + deploy-ocp + deploy-osac (~2h)
+make deploy-fast            # Snapshot pipeline: deploy-lab + deploy-ocp-snapshot (~15min for OCP+OSAC)
+make setup                  # Install prerequisites, cache images + snapshot flavor
 make deploy-lab             # Deploy netris-lab
 make connectivity           # Re-run lab connectivity (VPN, BGP, softgate agents)
 make deploy-ocp             # Resize OCP VM + configure Netris networking + install OCP SNO
+make deploy-ocp-snapshot    # Deploy OCP+OSAC from snapshot (recert + refresh)
 make deploy-osac            # Deploy OSAC + fulfillment-service + filter OS images
 make post-osac              # Scale down MCE operators + filter OS images (runs in deploy-osac)
 make setup-caas             # CaaS setup: discover hosts, label agents, register host type
@@ -46,13 +53,16 @@ make destroy-ocp            # Reset OCP for reinstall
 make vendor-update          # Refresh vendored Ansible collections
 make gather                 # Gather diagnostic info from the cluster
 # Override variables: make <target> EXTRA_VARS="key=value"
+# Image overrides: make deploy-ocp-snapshot EXTRA_VARS="fulfillment_service_image=quay.io/..."
 ```
 
 ## Workflow Order
 
-**Shared (all flows):** deploy (setup → deploy-lab → deploy-ocp → deploy-osac)
+**Full deploy (all flows):** deploy (setup → deploy-lab → deploy-ocp → deploy-osac)
 
-**CaaS:** deploy → setup-caas → deploy-caas
+**Snapshot deploy (fast):** deploy-fast (setup → deploy-lab → deploy-ocp-snapshot)
+
+**CaaS:** deploy or deploy-fast → setup-caas → deploy-caas
 
 **VMaaS:** deploy → deploy-vmaas (not yet implemented)
 
@@ -75,6 +85,7 @@ All variables in `inventory/group_vars/all.yml`. Key sections:
 - **OCP install**: `ocp_version`, `ocp_cluster_name`, `ocp_base_domain`
 - **OSAC**: `osac_installer_repo/branch`, `osac_namespace`, `osac_values_file`, `osac_aap_branch`
 - **Component images**: `osac_operator_image`, `fulfillment_service_image` (empty = defaults)
+- **Snapshot**: `snapshot_flavor_image`, `snapshot_flavor_dir`, `snapshot_recert_image`, `snapshot_osac_namespace`, `snapshot_osac_values_file`
 - **CaaS**: `caas_discovery_vm_patterns`, `caas_host_type_id`, `caas_cluster_name`, `caas_agents`
 
 ## External Dependencies
