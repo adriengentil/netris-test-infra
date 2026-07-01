@@ -74,6 +74,11 @@
       ansible.builtin.command:
         cmd: modprobe nbd max_part=8
 
+    - name: Disconnect stale nbd device
+      ansible.builtin.shell:
+        cmd: umount /tmp/flavor-mount 2>/dev/null; qemu-nbd --disconnect /dev/nbd0 2>/dev/null; true
+      changed_when: false
+
     - name: Connect OS disk overlay to nbd
       ansible.builtin.command:
         cmd: qemu-nbd --connect=/dev/nbd0 /var/lib/libvirt/images/hgx-00-ocp.qcow2
