@@ -18,7 +18,7 @@
     cmd: >-
       aws route53 list-resource-record-sets
       --hosted-zone-id {{ _r53_zone_id.stdout | trim }}
-      --query "ResourceRecordSets[?Name == 'api.{{ ocp_cluster_name }}.{{ ocp_base_domain }}.']|length(@)"
+      --query "ResourceRecordSets[?Name == 'api.{{ ocp_cluster_name }}.{{ ocp_base_domain }}.'].ResourceRecords[0].Value"
       --output text
   environment:
     AWS_ACCESS_KEY_ID: "{{ aws_access_key_id }}"
@@ -27,12 +27,16 @@
   register: _r53_existing
   changed_when: false
 
-- name: Fail if lab name is already in use
+- name: Fail if lab name is already in use by another lab
   ansible.builtin.fail:
     msg: >-
-      api.{{ ocp_cluster_name }}.{{ ocp_base_domain }} already exists in Route 53 —
+      api.{{ ocp_cluster_name }}.{{ ocp_base_domain }} already exists in Route 53
+      pointing to {{ _r53_existing.stdout | trim }} (expected {{ ocp_dnat_ip }}) —
       another lab is using LAB_NAME="{{ lab_name }}". Choose a different name.
-  when: _r53_existing.stdout | int > 0
+  when: >-
+    _r53_existing.stdout | trim | length > 0 and
+    _r53_existing.stdout | trim != 'None' and
+    _r53_existing.stdout | trim != ocp_dnat_ip
 
 - name: Create OCP DNS records in Route 53
   ansible.builtin.shell:
