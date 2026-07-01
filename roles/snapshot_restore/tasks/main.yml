@@ -32,7 +32,7 @@
     cmd: virsh detach-disk {{ ocp_vm_name }} {{ item }} --config
   loop: [vda, vdb, hdd]
   register: _detach
-  failed_when: _detach.rc != 0 and 'not found' not in _detach.stderr
+  failed_when: _detach.rc != 0 and 'not found' not in _detach.stderr and 'No disk found' not in _detach.stderr
   changed_when: _detach.rc == 0
 
 - name: Remove old disk images
