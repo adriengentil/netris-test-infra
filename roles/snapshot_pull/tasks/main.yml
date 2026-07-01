@@ -90,17 +90,21 @@
     - name: Reassemble disk images from compressed chunks
       ansible.builtin.shell:
         cmd: |
-          set -euo pipefail
+          set -eo pipefail
+          shopt -s nullglob
           disk_file="{{ snapshot_flavor_dir }}/disk-{{ item.index }}.qcow2"
           rm -f "${disk_file}"
+          mkdir -p "{{ _oci_tmp.path }}/chunks"
           {% for digest in item.layers %}
           blob="{{ _oci_tmp.path }}/oci/blobs/sha256/{{ digest }}"
-          tar xf "${blob}" -C "{{ _oci_tmp.path }}" --wildcards 'chunks/*.zst' 'chunks/*.gz' 2>/dev/null || true
-          for chunk in {{ _oci_tmp.path }}/chunks/*.zst; do
-            [ -f "$chunk" ] && zstd -dc "$chunk" >> "${disk_file}" && rm -f "$chunk"
+          tar xf "${blob}" -C "{{ _oci_tmp.path }}"
+          for chunk in "{{ _oci_tmp.path }}"/chunks/*.zst; do
+            zstd -dc "$chunk" >> "${disk_file}"
+            rm -f "$chunk"
           done
-          for chunk in {{ _oci_tmp.path }}/chunks/*.gz; do
-            [ -f "$chunk" ] && pigz -dc "$chunk" >> "${disk_file}" && rm -f "$chunk"
+          for chunk in "{{ _oci_tmp.path }}"/chunks/*.gz; do
+            pigz -dc "$chunk" >> "${disk_file}"
+            rm -f "$chunk"
           done
           {% endfor %}
         executable: /bin/bash
