@@ -85,6 +85,22 @@
         {{ osac_installer_dir }}/{{ snapshot_osac_values_file }}
   when: osac_aap_branch | default('') | length > 0
 
+- name: Disable osac-ui (image not published yet)
+  ansible.builtin.shell:
+    cmd: |
+      if grep -q 'osac-ui' {{ osac_installer_dir }}/{{ snapshot_osac_values_file }}; then
+        sed -i '/^ui:/,/^[a-z]/{s/enabled: true/enabled: false/}' \
+          {{ osac_installer_dir }}/{{ snapshot_osac_values_file }}
+      fi
+  changed_when: false
+
+- name: Scale down osac-ui deployment if running
+  ansible.builtin.shell:
+    cmd: oc scale deployment/osac-ui --replicas=0 -n {{ snapshot_osac_namespace }} 2>/dev/null || true
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+
 - name: Run refresh-after-snapshot.py
   ansible.builtin.shell:
     cmd: python3 -u scripts/refresh-after-snapshot.py
