@@ -1,0 +1,330 @@
+---
+- name: Find OCP server VM
+  ansible.builtin.shell:
+    cmd: virsh list --all --name | grep "{{ ocp_vm_name_pattern }}"
+  register: _vm_lookup
+  changed_when: false
+
+- name: Set VM name
+  ansible.builtin.set_fact:
+    ocp_vm_name: "{{ _vm_lookup.stdout_lines[0] }}"
+
+- name: Check if VM is running
+  ansible.builtin.shell:
+    cmd: virsh domstate {{ ocp_vm_name }}
+  register: _vm_state
+  changed_when: false
+
+- name: Shut down VM
+  ansible.builtin.command:
+    cmd: virsh destroy {{ ocp_vm_name }}
+  when: _vm_state.stdout | trim == 'running'
+  changed_when: true
+
+- name: Check which disks are attached
+  ansible.builtin.shell:
+    cmd: virsh domblklist {{ ocp_vm_name }}
+  register: _attached_disks
+  changed_when: false
+
+- name: Detach existing disks
+  ansible.builtin.command:
+    cmd: virsh detach-disk {{ ocp_vm_name }} {{ item }} --config
+  loop: [vda, vdb, hdd]
+  register: _detach
+  failed_when: _detach.rc != 0 and 'not found' not in _detach.stderr
+  changed_when: _detach.rc == 0
+
+- name: Remove old disk images
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/libvirt/images/hgx-00-ocp.qcow2
+    - /var/lib/libvirt/images/hgx-00-lvm.qcow2
+
+- name: Create CoW overlay for OS disk
+  ansible.builtin.command:
+    cmd: >-
+      qemu-img create -f qcow2
+      -b {{ snapshot_flavor_dir }}/disk-0.qcow2
+      -F qcow2
+      /var/lib/libvirt/images/hgx-00-ocp.qcow2
+
+- name: Create CoW overlay for LVM disk
+  ansible.builtin.command:
+    cmd: >-
+      qemu-img create -f qcow2
+      -b {{ snapshot_flavor_dir }}/disk-1.qcow2
+      -F qcow2
+      /var/lib/libvirt/images/hgx-00-lvm.qcow2
+
+- name: Set disk ownership
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: qemu
+    group: qemu
+  loop:
+    - /var/lib/libvirt/images/hgx-00-ocp.qcow2
+    - /var/lib/libvirt/images/hgx-00-lvm.qcow2
+
+- name: Mount OS disk and configure pre-boot settings
+  block:
+    - name: Load nbd kernel module
+      community.general.modprobe:
+        name: nbd
+        params: max_part=8
+        state: present
+
+    - name: Connect OS disk overlay to nbd
+      ansible.builtin.command:
+        cmd: qemu-nbd --connect=/dev/nbd0 /var/lib/libvirt/images/hgx-00-ocp.qcow2
+
+    - name: Wait for nbd device
+      ansible.builtin.pause:
+        seconds: 2
+
+    - name: Create mount point
+      ansible.builtin.file:
+        path: /tmp/flavor-mount
+        state: directory
+
+    - name: Mount ostree partition
+      ansible.posix.mount:
+        path: /tmp/flavor-mount
+        src: /dev/nbd0p4
+        fstype: xfs
+        state: mounted
+
+    - name: Find ostree deploy directory
+      ansible.builtin.shell:
+        cmd: ls -d /tmp/flavor-mount/ostree/deploy/rhcos/deploy/*/ | head -1
+      register: _ostree_deploy
+      changed_when: false
+
+    - name: Set deploy dir fact
+      ansible.builtin.set_fact:
+        _deploy: "{{ _ostree_deploy.stdout | trim }}"
+
+    # --- Read source identity ---
+
+    - name: Read source hostname
+      ansible.builtin.slurp:
+        src: "{{ _deploy }}etc/hostname"
+      register: _src_hostname_raw
+
+    - name: Set source hostname fact
+      ansible.builtin.set_fact:
+        snapshot_source_hostname: "{{ _src_hostname_raw.content | b64decode | trim }}"
+
+    - name: Read source kubeconfig
+      ansible.builtin.slurp:
+        src: "{{ _deploy }}etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/lb-ext.kubeconfig"
+      register: _src_kubeconfig_raw
+
+    - name: Parse source cluster name and domain from kubeconfig
+      ansible.builtin.set_fact:
+        _src_api_url: "{{ (_src_kubeconfig_raw.content | b64decode | from_yaml).clusters[0].cluster.server }}"
+
+    - name: Extract source cluster and domain
+      ansible.builtin.set_fact:
+        snapshot_source_cluster: "{{ _src_api_url | regex_search('api\\.([^.]+)\\.', '\\1') | first }}"
+        snapshot_source_domain: "{{ _src_api_url | regex_search('api\\.[^.]+\\.(.+):6443', '\\1') | first }}"
+
+    - name: Read source nodeip configuration
+      ansible.builtin.slurp:
+        src: "{{ _deploy }}etc/default/nodeip-configuration"
+      register: _src_nodeip_raw
+      failed_when: false
+
+    - name: Parse source IP from nodeip hint or NM connections
+      ansible.builtin.shell:
+        cmd: |
+          # Try nodeip hint first
+          if [ -f "{{ _deploy }}etc/default/nodeip-configuration" ]; then
+            hint=$(grep KUBELET_NODEIP_HINT "{{ _deploy }}etc/default/nodeip-configuration" | cut -d= -f2)
+            if [ -n "$hint" ]; then
+              # Find NM connections in the hinted subnet
+              for f in {{ _deploy }}etc/NetworkManager/system-connections/*.nmconnection; do
+                [ -f "$f" ] || continue
+                ip=$(grep -oP 'addresses=\K[0-9.]+' "$f" 2>/dev/null || true)
+                if [ -n "$ip" ]; then
+                  echo "$ip"
+                  exit 0
+                fi
+              done
+            fi
+          fi
+          # Fallback: scan dnsmasq overrides
+          if [ -f "{{ _deploy }}etc/default/sno_dnsmasq_configuration_overrides" ]; then
+            grep SNO_DNSMASQ_IP_OVERRIDE "{{ _deploy }}etc/default/sno_dnsmasq_configuration_overrides" | cut -d= -f2
+            exit 0
+          fi
+          echo "UNKNOWN"
+      register: _src_ip_result
+      changed_when: false
+
+    - name: Set source IP fact
+      ansible.builtin.set_fact:
+        snapshot_source_ip: "{{ _src_ip_result.stdout | trim }}"
+
+    - name: Report source identity
+      ansible.builtin.debug:
+        msg: >-
+          Source identity: hostname={{ snapshot_source_hostname }},
+          cluster={{ snapshot_source_cluster }}.{{ snapshot_source_domain }},
+          ip={{ snapshot_source_ip }}
+
+    # --- Write target config ---
+
+    - name: Write target hostname
+      ansible.builtin.copy:
+        content: "{{ ocp_vm_name }}"
+        dest: "{{ _deploy }}etc/hostname"
+        mode: "0644"
+
+    - name: Write nodeip hint
+      ansible.builtin.copy:
+        content: "KUBELET_NODEIP_HINT={{ ocp_subnet_cidr | ansible.utils.ipaddr('network') }}"
+        dest: "{{ _deploy }}etc/default/nodeip-configuration"
+        mode: "0644"
+
+    - name: Write dnsmasq overrides
+      ansible.builtin.copy:
+        content: |
+          SNO_CLUSTER_NAME_OVERRIDE={{ ocp_cluster_name }}
+          SNO_BASE_DOMAIN_OVERRIDE={{ ocp_base_domain }}
+          SNO_DNSMASQ_IP_OVERRIDE={{ ocp_node_ip }}
+        dest: "{{ _deploy }}etc/default/sno_dnsmasq_configuration_overrides"
+        mode: "0644"
+
+    - name: Ensure NM system-connections directory exists
+      ansible.builtin.file:
+        path: "{{ _deploy }}etc/NetworkManager/system-connections"
+        state: directory
+        mode: "0755"
+
+    - name: Write static NM connection for ens5
+      ansible.builtin.copy:
+        content: |
+          [connection]
+          id=ens5-static
+          type=ethernet
+          interface-name=ens5
+          autoconnect=true
+          autoconnect-priority=100
+
+          [ipv4]
+          method=manual
+          addresses={{ ocp_node_ip }}/{{ ocp_subnet_cidr | ansible.utils.ipaddr('prefix') }}
+          gateway={{ ocp_gateway | ansible.utils.ipaddr('address') }}
+          dns=192.168.16.1;8.8.8.8;
+
+          [ipv6]
+          method=disabled
+        dest: "{{ _deploy }}etc/NetworkManager/system-connections/ens5-static.nmconnection"
+        mode: "0600"
+
+    # --- Delete OVN/OVS state ---
+
+    - name: Delete OVN/OVS databases
+      ansible.builtin.file:
+        path: "{{ _deploy }}{{ item }}"
+        state: absent
+      loop:
+        - etc/openvswitch/conf.db
+        - etc/openvswitch/.conf.db.~lock~
+        - etc/ovn/ovnsb_db.db
+        - etc/ovn/ovnnb_db.db
+
+    - name: Delete OVN interconnect state
+      ansible.builtin.file:
+        path: "{{ _deploy }}var/lib/ovn-ic/etc"
+        state: absent
+
+  always:
+    - name: Unmount ostree partition
+      ansible.posix.mount:
+        path: /tmp/flavor-mount
+        state: unmounted
+      failed_when: false
+
+    - name: Disconnect nbd device
+      ansible.builtin.command:
+        cmd: qemu-nbd --disconnect /dev/nbd0
+      failed_when: false
+
+# --- Attach disks, resize VM, boot ---
+
+- name: Attach OS disk
+  ansible.builtin.command:
+    cmd: virsh attach-disk {{ ocp_vm_name }} /var/lib/libvirt/images/hgx-00-ocp.qcow2 vda --persistent --subdriver qcow2
+
+- name: Attach LVM disk
+  ansible.builtin.command:
+    cmd: virsh attach-disk {{ ocp_vm_name }} /var/lib/libvirt/images/hgx-00-lvm.qcow2 vdb --persistent --subdriver qcow2
+
+- name: Get current vCPU count
+  ansible.builtin.shell:
+    cmd: virsh dominfo {{ ocp_vm_name }} | grep 'CPU(s)' | head -1 | awk '{print $2}'
+  register: _current_vcpu
+  changed_when: false
+
+- name: Set maximum vCPUs
+  ansible.builtin.command:
+    cmd: virsh setvcpus {{ ocp_vm_name }} {{ ocp_server_vcpu }} --config --maximum
+  when: _current_vcpu.stdout | int != ocp_server_vcpu | int
+
+- name: Set vCPUs
+  ansible.builtin.command:
+    cmd: virsh setvcpus {{ ocp_vm_name }} {{ ocp_server_vcpu }} --config
+  when: _current_vcpu.stdout | int != ocp_server_vcpu | int
+
+- name: Get current max memory
+  ansible.builtin.shell:
+    cmd: virsh dominfo {{ ocp_vm_name }} | grep 'Max memory' | awk '{print $3}'
+  register: _current_mem_kb
+  changed_when: false
+
+- name: Set maximum memory
+  ansible.builtin.command:
+    cmd: virsh setmaxmem {{ ocp_vm_name }} {{ ocp_server_memory_gb }}G --config
+  when: (_current_mem_kb.stdout | int / 1048576) | round(0) | int != ocp_server_memory_gb | int
+
+- name: Set memory
+  ansible.builtin.command:
+    cmd: virsh setmem {{ ocp_vm_name }} {{ ocp_server_memory_gb }}G --config
+  when: (_current_mem_kb.stdout | int / 1048576) | round(0) | int != ocp_server_memory_gb | int
+
+- name: Boot VM
+  ansible.builtin.command:
+    cmd: virsh start {{ ocp_vm_name }}
+
+- name: Wait for VM to get management IP
+  ansible.builtin.shell:
+    cmd: virsh domifaddr {{ ocp_vm_name }} | grep -oP '192\.168\.16\.\d+'
+  register: _vm_mgmt_ip
+  until: _vm_mgmt_ip.rc == 0 and _vm_mgmt_ip.stdout | trim | length > 0
+  retries: 60
+  delay: 5
+  changed_when: false
+
+- name: Set management IP fact
+  ansible.builtin.set_fact:
+    _vm_mgmt_ip: "{{ _vm_mgmt_ip.stdout | trim }}"
+
+- name: Wait for SSH
+  ansible.builtin.command:
+    cmd: >-
+      ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5
+      -i {{ snapshot_flavor_dir }}/crypto/cluster-tool.key
+      core@{{ _vm_mgmt_ip }} hostname
+  register: _ssh_check
+  until: _ssh_check.rc == 0
+  retries: 60
+  delay: 5
+  changed_when: false
+
+- name: Report VM booted
+  ansible.builtin.debug:
+    msg: "VM {{ ocp_vm_name }} booted, SSH accessible at {{ _vm_mgmt_ip }}"
