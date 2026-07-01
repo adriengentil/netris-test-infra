@@ -72,9 +72,14 @@
   register: _pull_secret
   no_log: true
 
-- name: Restart assisted-service to ensure auth keypair is stable
+- name: Regenerate assisted-service auth keypair
   ansible.builtin.shell:
     cmd: |
+      oc delete secret assisted-servicelocal-auth -n multicluster-engine --ignore-not-found
+      for i in $(seq 30); do
+        oc get secret assisted-servicelocal-auth -n multicluster-engine --no-headers 2>/dev/null && break
+        sleep 2
+      done
       oc rollout restart deployment/assisted-service -n multicluster-engine
       oc rollout restart statefulset/assisted-image-service -n multicluster-engine
       oc rollout status deployment/assisted-service -n multicluster-engine --timeout=120s
