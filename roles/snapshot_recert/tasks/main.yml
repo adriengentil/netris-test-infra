@@ -50,11 +50,11 @@
 
 - name: Run recert with standalone etcd
   block:
-    - name: Read etcd image from flavor manifest
+    - name: Detect etcd image in VM podman storage
       ansible.builtin.shell:
         cmd: >-
-          python3 -c "import json; d=json.load(open('{{ snapshot_flavor_dir }}/manifest.json'));
-          print(d['metadata']['etcd_image'])"
+          {{ _ssh_cmd }} "sudo podman images --format '{{ '{{' }}.Repository{{ '}}' }}:{{ '{{' }}.Tag{{ '}}' }}'
+          | grep etcd | head -1"
       register: _etcd_image
       changed_when: false
 
@@ -63,7 +63,7 @@
         cmd: >-
           {{ _ssh_cmd }} "sudo podman run -d --name etcd-recert
           --network host --privileged
-          --authfile /var/lib/kubelet/config.json
+          --pull=never
           -v /var/lib/etcd:/store
           --entrypoint etcd
           {{ _etcd_image.stdout | trim }}
