@@ -46,98 +46,96 @@
   ansible.builtin.pause:
     seconds: 5
 
-# --- Start standalone etcd ---
+# --- Etcd + recert (block/always ensures etcd cleanup on failure) ---
 
-- name: Detect etcd image on VM
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "sudo crictl images -o json" |
-      python3 -c "import json,sys; d=json.load(sys.stdin);
-      [print(t) for i in d['images'] for t in i.get('repoTags',[]) if 'etcd' in t]" |
-      head -1
-  register: _etcd_image
-  changed_when: false
+- name: Run recert with standalone etcd
+  block:
+    - name: Detect etcd image on VM
+      ansible.builtin.shell:
+        cmd: >-
+          {{ _ssh_cmd }} "sudo crictl images -o json" |
+          python3 -c "import json,sys; d=json.load(sys.stdin);
+          [print(t) for i in d['images'] for t in i.get('repoTags',[]) if 'etcd' in t]" |
+          head -1
+      register: _etcd_image
+      changed_when: false
 
-- name: Start standalone etcd for recert
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "sudo podman run -d --name etcd-recert
-      --network host --privileged
-      -v /var/lib/etcd:/store
-      --entrypoint etcd
-      {{ _etcd_image.stdout | trim }}
-      --name editor --data-dir /store
-      --listen-client-urls http://localhost:2379
-      --advertise-client-urls http://localhost:2379"
+    - name: Start standalone etcd for recert
+      ansible.builtin.shell:
+        cmd: >-
+          {{ _ssh_cmd }} "sudo podman run -d --name etcd-recert
+          --network host --privileged
+          -v /var/lib/etcd:/store
+          --entrypoint etcd
+          {{ _etcd_image.stdout | trim }}
+          --name editor --data-dir /store
+          --listen-client-urls http://localhost:2379
+          --advertise-client-urls http://localhost:2379"
 
-- name: Wait for etcd to be healthy
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "curl -sf http://localhost:2379/health"
-  register: _etcd_health
-  until: _etcd_health.rc == 0
-  retries: 30
-  delay: 2
+    - name: Wait for etcd to be healthy
+      ansible.builtin.shell:
+        cmd: >-
+          {{ _ssh_cmd }} "curl -sf http://localhost:2379/health"
+      register: _etcd_health
+      until: _etcd_health.rc == 0
+      retries: 30
+      delay: 2
 
-# --- Delete hypershift secrets ---
+    - name: Delete hypershift secrets from etcd
+      ansible.builtin.shell:
+        cmd: >-
+          {{ _ssh_cmd }} "sudo podman exec etcd-recert etcdctl del '{{ item }}' {{ '--prefix' if item.endswith('/') else '' }}"
+      loop:
+        - /kubernetes.io/secrets/hypershift/
+        - /kubernetes.io/validatingwebhookconfigurations/hypershift.openshift.io
+        - /kubernetes.io/mutatingwebhookconfigurations/hypershift.openshift.io
+        - /kubernetes.io/secrets/open-cluster-management-agent-addon/hypershift-addon-agent-metrics
+        - /kubernetes.io/secrets/open-cluster-management-agent-addon/hypershift-addon-hub-kubeconfig
+      failed_when: false
 
-- name: Delete hypershift secrets from etcd
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "sudo podman exec etcd-recert etcdctl del '{{ item }}' {{ '--prefix' if item.endswith('/') else '' }}"
-  loop:
-    - /kubernetes.io/secrets/hypershift/
-    - /kubernetes.io/validatingwebhookconfigurations/hypershift.openshift.io
-    - /kubernetes.io/mutatingwebhookconfigurations/hypershift.openshift.io
-    - /kubernetes.io/secrets/open-cluster-management-agent-addon/hypershift-addon-agent-metrics
-    - /kubernetes.io/secrets/open-cluster-management-agent-addon/hypershift-addon-hub-kubeconfig
-  failed_when: false
+    - name: Run recert
+      ansible.builtin.shell:
+        cmd: >-
+          {{ _ssh_cmd }} "sudo podman run --rm --name recert --pull=missing
+          --network host --privileged
+          -v /etc/kubernetes:/etc/kubernetes
+          -v /var/lib/kubelet:/var/lib/kubelet
+          -v /etc/machine-config-daemon:/etc/machine-config-daemon
+          -v /etc/cni:/etc/cni
+          -v /tmp/crypto:/tmp/crypto:ro
+          {{ snapshot_recert_image }}
+          --etcd-endpoint localhost:2379
+          --crypto-dir /etc/kubernetes
+          --crypto-dir /var/lib/kubelet
+          --crypto-dir /etc/machine-config-daemon
+          --crypto-dir /etc/cni
+          --cluster-customization-dir /etc/kubernetes
+          --cluster-customization-dir /var/lib/kubelet
+          --cluster-customization-dir /etc/machine-config-daemon
+          --use-key kube-apiserver-lb-signer:/tmp/crypto/lb-signer.key
+          --use-key kube-apiserver-localhost-signer:/tmp/crypto/localhost-signer.key
+          --use-key kube-apiserver-service-network-signer:/tmp/crypto/service-network-signer.key
+          --use-key '{{ _ingress_cn }}:/tmp/crypto/ingress.key'
+          --pull-secret /tmp/crypto/pull-secret
+          --cluster-rename {{ ocp_cluster_name }}:{{ ocp_base_domain }}
+          --hostname {{ ocp_vm_name }}
+          --ip {{ ocp_node_ip }}
+          --cn-san-replace api.{{ snapshot_source_cluster }}.{{ snapshot_source_domain }}:api.{{ ocp_cluster_name }}.{{ ocp_base_domain }}
+          --cn-san-replace api-int.{{ snapshot_source_cluster }}.{{ snapshot_source_domain }}:api-int.{{ ocp_cluster_name }}.{{ ocp_base_domain }}
+          --cn-san-replace '*.apps.{{ snapshot_source_cluster }}.{{ snapshot_source_domain }}:*.apps.{{ ocp_cluster_name }}.{{ ocp_base_domain }}'
+          --cn-san-replace {{ snapshot_source_hostname }}:{{ ocp_vm_name }}
+          --cn-san-replace system:node:{{ snapshot_source_hostname }},system:node:{{ ocp_vm_name }}
+          --cn-san-replace {{ snapshot_source_ip }}:{{ ocp_node_ip }}
+          --extend-expiration"
+      register: _recert_result
+      timeout: 600
 
-# --- Run recert ---
-
-- name: Run recert
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "sudo podman run --rm --name recert --pull=missing
-      --network host --privileged
-      -v /etc/kubernetes:/etc/kubernetes
-      -v /var/lib/kubelet:/var/lib/kubelet
-      -v /etc/machine-config-daemon:/etc/machine-config-daemon
-      -v /etc/cni:/etc/cni
-      -v /tmp/crypto:/tmp/crypto:ro
-      {{ snapshot_recert_image }}
-      --etcd-endpoint localhost:2379
-      --crypto-dir /etc/kubernetes
-      --crypto-dir /var/lib/kubelet
-      --crypto-dir /etc/machine-config-daemon
-      --crypto-dir /etc/cni
-      --cluster-customization-dir /etc/kubernetes
-      --cluster-customization-dir /var/lib/kubelet
-      --cluster-customization-dir /etc/machine-config-daemon
-      --use-key kube-apiserver-lb-signer:/tmp/crypto/lb-signer.key
-      --use-key kube-apiserver-localhost-signer:/tmp/crypto/localhost-signer.key
-      --use-key kube-apiserver-service-network-signer:/tmp/crypto/service-network-signer.key
-      --use-key '{{ _ingress_cn }}:/tmp/crypto/ingress.key'
-      --pull-secret /tmp/crypto/pull-secret
-      --cluster-rename {{ ocp_cluster_name }}:{{ ocp_base_domain }}
-      --hostname {{ ocp_vm_name }}
-      --ip {{ ocp_node_ip }}
-      --cn-san-replace api.{{ snapshot_source_cluster }}.{{ snapshot_source_domain }}:api.{{ ocp_cluster_name }}.{{ ocp_base_domain }}
-      --cn-san-replace api-int.{{ snapshot_source_cluster }}.{{ snapshot_source_domain }}:api-int.{{ ocp_cluster_name }}.{{ ocp_base_domain }}
-      --cn-san-replace '*.apps.{{ snapshot_source_cluster }}.{{ snapshot_source_domain }}:*.apps.{{ ocp_cluster_name }}.{{ ocp_base_domain }}'
-      --cn-san-replace {{ snapshot_source_hostname }}:{{ ocp_vm_name }}
-      --cn-san-replace system:node:{{ snapshot_source_hostname }},system:node:{{ ocp_vm_name }}
-      --cn-san-replace {{ snapshot_source_ip }}:{{ ocp_node_ip }}
-      --extend-expiration"
-  register: _recert_result
-  timeout: 600
-
-# --- Restart services ---
-
-- name: Stop and remove etcd container
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "sudo podman stop etcd-recert && sudo podman rm etcd-recert"
+  always:
+    - name: Stop and remove etcd container
+      ansible.builtin.shell:
+        cmd: >-
+          {{ _ssh_cmd }} "sudo podman stop etcd-recert 2>/dev/null; sudo podman rm etcd-recert 2>/dev/null"
+      failed_when: false
 
 - name: Start crio
   ansible.builtin.command:
