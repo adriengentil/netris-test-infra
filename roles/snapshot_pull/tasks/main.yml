@@ -95,13 +95,13 @@
           rm -f "${disk_file}"
           {% for digest in item.layers %}
           blob="{{ _oci_tmp.path }}/oci/blobs/sha256/{{ digest }}"
-          if file "${blob}" | grep -q 'Zstandard'; then
-            zstd -dc "${blob}" >> "${disk_file}"
-          elif file "${blob}" | grep -q 'gzip'; then
-            pigz -dc "${blob}" >> "${disk_file}"
-          else
-            cat "${blob}" >> "${disk_file}"
-          fi
+          tar xf "${blob}" -C "{{ _oci_tmp.path }}" --wildcards 'chunks/*.zst' 'chunks/*.gz' 2>/dev/null || true
+          for chunk in {{ _oci_tmp.path }}/chunks/*.zst; do
+            [ -f "$chunk" ] && zstd -dc "$chunk" >> "${disk_file}" && rm -f "$chunk"
+          done
+          for chunk in {{ _oci_tmp.path }}/chunks/*.gz; do
+            [ -f "$chunk" ] && pigz -dc "$chunk" >> "${disk_file}" && rm -f "$chunk"
+          done
           {% endfor %}
         executable: /bin/bash
       loop: "{{ _disk_layer_map }}"
