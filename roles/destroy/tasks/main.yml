@@ -20,6 +20,11 @@
     - /root/kubeconfig.{{ ocp_cluster_name | default('ocp-sno') }}
     - /root/.kube/config
 
+- name: Remove osac-installer
+  ansible.builtin.file:
+    path: "{{ osac_installer_dir | default('/opt/osac-installer') }}"
+    state: absent
+
 - name: Remove OCP disks
   ansible.builtin.file:
     path: "{{ item }}"
