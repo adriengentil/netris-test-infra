@@ -96,6 +96,11 @@
   register: _refresh_result
   timeout: 1200
 
+- name: Show OSAC refresh output
+  ansible.builtin.debug:
+    msg: "{{ _refresh_result.stdout }}"
+  when: _refresh_result.stdout | default('') | length > 0
+
 - name: Report OSAC refresh status
   ansible.builtin.debug:
     msg: "OSAC refresh completed in namespace {{ snapshot_osac_namespace }}"
