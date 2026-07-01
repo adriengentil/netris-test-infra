@@ -20,7 +20,7 @@
 
 # --- Fix SELinux labels on files written via qemu-nbd ---
 
-# --- Reconfigure br-ex to use ens5 with correct IP (LCA approach) ---
+# --- Fix SELinux labels and activate NM connections ---
 
 - name: Restore SELinux labels on files written via qemu-nbd
   ansible.builtin.shell:
@@ -28,72 +28,26 @@
       {{ _ssh_cmd }} "sudo restorecon -Rv /etc/default/ /etc/NetworkManager/ 2>&1"
   changed_when: true
 
-- name: Detect current br-ex physical interface
+- name: Reload NM and activate ens5 static connection
   ansible.builtin.shell:
     cmd: >-
-      {{ _ssh_cmd }} "sudo ovs-vsctl list-ports br-ex | grep -v patch | grep -v br-ex | head -1"
-  register: _brex_current_iface
-  changed_when: false
+      {{ _ssh_cmd }} "sudo nmcli con reload && sudo nmcli con up ens5-static 2>&1"
+  register: _nm_activate
+  until: _nm_activate.rc == 0
+  retries: 5
+  delay: 3
 
-- name: Swap br-ex physical port from {{ _brex_current_iface.stdout | default('ens4') }} to ens5
+- name: Reconfigure OVN to use ens5 for br-ex
   ansible.builtin.shell:
     cmd: >-
       {{ _ssh_cmd }} "sudo bash -c '
-      CURRENT={{ _brex_current_iface.stdout | trim }}
-      if [ \"$CURRENT\" != \"ens5\" ]; then
-        ovs-vsctl del-port br-ex $CURRENT || true
-        ovs-vsctl add-port br-ex ens5 || true
-        ip addr flush ens5 2>/dev/null || true
-      fi
-      '"
-  when: _brex_current_iface.stdout | trim != 'ens5'
-
-- name: Write nmstate config for br-ex IP
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "sudo bash -c 'cat > /tmp/nmstate-brex.yaml << NMEOF
-      interfaces:
-      - name: ens5
-        type: ethernet
-        state: up
-        ipv4:
-          enabled: true
-          dhcp: false
-          address:
-          - ip: {{ ocp_node_ip }}
-            prefix-length: {{ ocp_subnet_cidr | ansible.utils.ipaddr(\"prefix\") }}
-        ipv6:
-          enabled: false
-          dhcp: false
-          autoconf: false
-      routes:
-        config:
-        - destination: 0.0.0.0/0
-          next-hop-interface: ens5
-          next-hop-address: {{ ocp_gateway | ansible.utils.ipaddr(\"address\") }}
-          metric: 48
-          table-id: 254
-      dns-resolver:
-        config:
-          server:
-          - 192.168.16.1
-          - 8.8.8.8
-      NMEOF
-      '"
-
-- name: Apply nmstate config to reconfigure br-ex IP
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "sudo nmstatectl apply /tmp/nmstate-brex.yaml 2>&1"
-  register: _nmstate_apply
-
-- name: Restart nodeip-configuration to pick up new IP
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "sudo bash -c '
-      rm -f /run/nodeip-configuration/primary-ip
+      rm -f /etc/openvswitch/conf.db /etc/openvswitch/.conf.db.~lock~
+      rm -f /etc/ovn/ovnsb_db.db /etc/ovn/ovnnb_db.db
+      rm -rf /var/lib/ovn-ic/etc /run/nodeip-configuration
+      systemctl restart openvswitch
       systemctl restart nodeip-configuration
       systemctl daemon-reload
+      systemctl restart NetworkManager
       '"
 
 - name: Wait for br-ex to have correct IP
@@ -102,7 +56,7 @@
       {{ _ssh_cmd }} "ip -4 addr show br-ex 2>/dev/null | grep -oP 'inet \K[0-9.]+'"
   register: _brex_ip
   until: _brex_ip.rc == 0 and _brex_ip.stdout | trim == ocp_node_ip
-  retries: 30
+  retries: 60
   delay: 5
   changed_when: false
 
