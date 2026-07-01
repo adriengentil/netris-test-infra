@@ -66,6 +66,13 @@ osac_aap_repo: "https://github.com/osac-project/osac-aap.git"
 osac_aap_branch: ""
 osac_aap_image: ""
 
+# Snapshot-based deployment (fast path)
+snapshot_flavor_image: "quay.io/rh-ee-ovishlit/cluster-flavors:caas"
+snapshot_flavor_dir: "/var/cache/netris-lab/cluster-flavors/caas"
+snapshot_recert_image: "quay.io/rh-ee-ovishlit/recert:latest"
+snapshot_osac_namespace: "osac-e2e-ci"
+snapshot_osac_values_file: "values/caas-ci/values.yaml"
+
 # AWS configuration for Route 53 DNS (read from config file or environment)
 aws_access_key_id: "{{ lookup('ini', 'aws_access_key_id section=default file=' + config_path, errors='ignore') | default(lookup('env', 'AWS_ACCESS_KEY_ID'), true) }}"
 aws_secret_access_key: "{{ lookup('ini', 'aws_secret_access_key section=default file=' + config_path, errors='ignore') | default(lookup('env', 'AWS_SECRET_ACCESS_KEY'), true) }}"
