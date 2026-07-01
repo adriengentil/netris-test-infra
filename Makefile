@@ -1,4 +1,5 @@
-.PHONY: deploy setup deploy-lab deploy-ocp deploy-osac setup-caas deploy-caas \
+.PHONY: deploy deploy-fast setup deploy-lab deploy-ocp deploy-ocp-snapshot deploy-osac \
+       setup-caas deploy-caas \
        deploy-vmaas deploy-bmaas \
        destroy destroy-osac destroy-ocp destroy-caas destroy-vmaas destroy-bmaas \
        connectivity prep-osac run-osac-setup post-osac vendor-update lint \
@@ -55,6 +56,12 @@ deploy-vmaas:
 
 deploy-bmaas:
 	@echo "BMaaS flow is not yet implemented"
+
+# Snapshot-based fast deployment
+deploy-fast: deploy-lab deploy-ocp-snapshot
+
+deploy-ocp-snapshot:
+	ansible-playbook playbooks/deploy-snapshot.yml $(ANSIBLE_EXTRA)
 
 # Destroy targets
 destroy:
