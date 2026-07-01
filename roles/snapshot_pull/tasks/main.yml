@@ -79,11 +79,11 @@
           {%- set ns = namespace(offset=2, result=[]) -%}
           {%- for disk in _flavor_manifest.disks -%}
             {%- set layers = [] -%}
-            {%- for i in range(disk.chunks) -%}
+            {%- for i in range(disk.chunk_count) -%}
               {%- set _ = layers.append(_oci_layers[ns.offset + i].digest | replace('sha256:', '')) -%}
             {%- endfor -%}
             {%- set _ = ns.result.append({'index': loop.index0, 'layers': layers}) -%}
-            {%- set ns.offset = ns.offset + disk.chunks -%}
+            {%- set ns.offset = ns.offset + disk.chunk_count -%}
           {%- endfor -%}
           {{ ns.result }}
 
