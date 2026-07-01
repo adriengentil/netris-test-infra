@@ -18,37 +18,7 @@
   ansible.builtin.set_fact:
     _ingress_cn: "{{ _ingress_cn_raw.content | b64decode | trim }}"
 
-# --- Fix SELinux labels on files written via qemu-nbd ---
-
-# --- Fix SELinux labels and activate NM connections ---
-
-- name: Restore SELinux labels on files written via qemu-nbd
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "sudo restorecon -Rv /etc/default/ /etc/NetworkManager/ 2>&1"
-  changed_when: true
-
-- name: Reload NM and activate ens5 static connection
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "sudo nmcli con reload && sudo nmcli con up ens5-static 2>&1"
-  register: _nm_activate
-  until: _nm_activate.rc == 0
-  retries: 5
-  delay: 3
-
-- name: Reconfigure OVN to use ens5 for br-ex
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "sudo bash -c '
-      rm -f /etc/openvswitch/conf.db /etc/openvswitch/.conf.db.~lock~
-      rm -f /etc/ovn/ovnsb_db.db /etc/ovn/ovnnb_db.db
-      rm -rf /var/lib/ovn-ic/etc /run/nodeip-configuration
-      systemctl restart openvswitch
-      systemctl restart nodeip-configuration
-      systemctl daemon-reload
-      systemctl restart NetworkManager
-      '"
+# --- Verify br-ex has correct IP (set by snapshot-network-config.service during boot) ---
 
 - name: Wait for br-ex to have correct IP
   ansible.builtin.shell:
