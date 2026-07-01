@@ -1,0 +1,85 @@
+---
+- name: Check if osac-installer already exists
+  ansible.builtin.stat:
+    path: "{{ osac_installer_dir }}/scripts/refresh-after-snapshot.py"
+  register: _installer_exists
+
+- name: Clone osac-installer
+  ansible.builtin.git:
+    repo: "{{ osac_installer_repo }}"
+    dest: "{{ osac_installer_dir }}"
+    version: "{{ osac_installer_branch }}"
+    force: true
+  when: not _installer_exists.stat.exists
+
+- name: Initialize submodules
+  ansible.builtin.command:
+    cmd: git submodule update --init --recursive
+    chdir: "{{ osac_installer_dir }}"
+  register: _submodule_update
+  changed_when: _submodule_update.stdout | length > 0
+  when: not _installer_exists.stat.exists
+
+- name: Determine values directory
+  ansible.builtin.set_fact:
+    _values_dir: "{{ snapshot_osac_values_file | dirname }}"
+
+- name: Ensure values directory exists
+  ansible.builtin.file:
+    path: "{{ osac_installer_dir }}/{{ _values_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Copy AAP license to values directory
+  ansible.builtin.copy:
+    src: "{{ osac_license_path }}"
+    dest: "{{ osac_installer_dir }}/{{ _values_dir }}/license.zip"
+    remote_src: true
+    mode: "0644"
+
+- name: Copy pull-secret to values directory
+  ansible.builtin.copy:
+    src: "{{ pull_secret_path }}"
+    dest: "{{ osac_installer_dir }}/{{ _values_dir }}/pull-secret.json"
+    remote_src: true
+    mode: "0644"
+
+- name: Override fulfillment-service image in values file
+  ansible.builtin.shell:
+    cmd: |
+      sed -i 's|[a-zA-Z0-9./_-]*fulfillment-service:[a-zA-Z0-9._-]*|{{ fulfillment_service_image }}|g' \
+        {{ osac_installer_dir }}/{{ snapshot_osac_values_file }}
+  when: fulfillment_service_image | default('') | length > 0
+
+- name: Override osac-operator image in values file
+  ansible.builtin.shell:
+    cmd: |
+      REPO="{{ osac_operator_image | regex_replace(':[^/]+$', '') }}"
+      TAG="{{ osac_operator_image | regex_search(':[^/]+$') | regex_replace('^:', '') | default('latest', true) }}"
+      sed -i "s|[a-zA-Z0-9./_-]*osac-operator:[a-zA-Z0-9._-]*|{{ osac_operator_image }}|g" \
+        {{ osac_installer_dir }}/{{ snapshot_osac_values_file }}
+      sed -i "/repository: .*osac-operator/{s|repository: .*|repository: ${REPO}|;n;s/tag: .*/tag: ${TAG}/}" \
+        {{ osac_installer_dir }}/{{ snapshot_osac_values_file }}
+  when: osac_operator_image | default('') | length > 0
+
+- name: Override osac-aap image in values file
+  ansible.builtin.shell:
+    cmd: |
+      sed -i 's|[a-zA-Z0-9./_-]*osac-aap:[a-zA-Z0-9._-]*|{{ osac_aap_image }}|g' \
+        {{ osac_installer_dir }}/{{ snapshot_osac_values_file }}
+  when: osac_aap_image | default('') | length > 0
+
+- name: Run refresh-after-snapshot.py
+  ansible.builtin.shell:
+    cmd: python3 -u scripts/refresh-after-snapshot.py
+    chdir: "{{ osac_installer_dir }}"
+  environment:
+    KUBECONFIG: /root/.kube/config
+    VALUES_FILE: "{{ snapshot_osac_values_file }}"
+    INSTALLER_NAMESPACE: "{{ snapshot_osac_namespace }}"
+  register: _refresh_result
+  timeout: 1200
+
+- name: Report OSAC refresh status
+  ansible.builtin.debug:
+    msg: "OSAC refresh completed in namespace {{ snapshot_osac_namespace }}"
