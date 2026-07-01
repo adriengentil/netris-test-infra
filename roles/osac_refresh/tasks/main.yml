@@ -1,16 +1,10 @@
 ---
-- name: Check if osac-installer already exists
-  ansible.builtin.stat:
-    path: "{{ osac_installer_dir }}/scripts/refresh-after-snapshot.py"
-  register: _installer_exists
-
 - name: Clone osac-installer
   ansible.builtin.git:
     repo: "{{ osac_installer_repo }}"
     dest: "{{ osac_installer_dir }}"
     version: "{{ osac_installer_branch }}"
     force: true
-  when: not _installer_exists.stat.exists
 
 - name: Initialize submodules
   ansible.builtin.command:
@@ -18,7 +12,22 @@
     chdir: "{{ osac_installer_dir }}"
   register: _submodule_update
   changed_when: _submodule_update.stdout | length > 0
-  when: not _installer_exists.stat.exists
+
+- name: Override osac-operator code in installer
+  ansible.builtin.git:
+    repo: "{{ osac_operator_repo }}"
+    dest: "{{ osac_installer_dir }}/base/osac-operator"
+    version: "{{ osac_operator_branch }}"
+    force: true
+  when: osac_operator_branch | default('') | length > 0
+
+- name: Override fulfillment-service code in installer
+  ansible.builtin.git:
+    repo: "{{ fulfillment_service_repo }}"
+    dest: "{{ osac_installer_dir }}/base/osac-fulfillment-service"
+    version: "{{ fulfillment_service_branch }}"
+    force: true
+  when: fulfillment_service_branch | default('') | length > 0
 
 - name: Determine values directory
   ansible.builtin.set_fact:
@@ -68,6 +77,13 @@
       sed -i 's|[a-zA-Z0-9./_-]*osac-aap:[a-zA-Z0-9._-]*|{{ osac_aap_image }}|g' \
         {{ osac_installer_dir }}/{{ snapshot_osac_values_file }}
   when: osac_aap_image | default('') | length > 0
+
+- name: Override AAP project git branch in values file
+  ansible.builtin.shell:
+    cmd: |
+      sed -i 's|projectGitBranch: .*|projectGitBranch: "{{ osac_aap_branch }}"|' \
+        {{ osac_installer_dir }}/{{ snapshot_osac_values_file }}
+  when: osac_aap_branch | default('') | length > 0
 
 - name: Run refresh-after-snapshot.py
   ansible.builtin.shell:
