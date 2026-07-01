@@ -245,24 +245,17 @@
     cmd: |
       oc get co -o json | python3 -c "
       import json, sys
-      SKIP_DEGRADED = {'machine-config'}
       cos = json.load(sys.stdin)['items']
-      warnings = []
       for co in cos:
           name = co['metadata']['name']
           conditions = {c['type']: c['status'] for c in co.get('status', {}).get('conditions', [])}
           if conditions.get('Available') != 'True':
               print(f'NOT READY: {name} (Available={conditions.get(\"Available\")})')
               sys.exit(1)
-          if conditions.get('Degraded') == 'True' and name not in SKIP_DEGRADED:
+          if conditions.get('Degraded') == 'True':
               print(f'DEGRADED: {name}')
               sys.exit(1)
-          elif conditions.get('Degraded') == 'True':
-              warnings.append(name)
-      msg = f'All {len(cos)} ClusterOperators available'
-      if warnings:
-          msg += f' (degraded but skipped: {warnings})'
-      print(msg)
+      print(f'All {len(cos)} ClusterOperators healthy')
       "
   environment:
     KUBECONFIG: /root/.kube/config
