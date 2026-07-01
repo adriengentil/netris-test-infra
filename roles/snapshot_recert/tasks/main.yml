@@ -18,6 +18,31 @@
   ansible.builtin.set_fact:
     _ingress_cn: "{{ _ingress_cn_raw.content | b64decode | trim }}"
 
+# --- Fix SELinux labels on files written via qemu-nbd ---
+
+- name: Restore SELinux labels on NM connections and config
+  ansible.builtin.shell:
+    cmd: >-
+      {{ _ssh_cmd }} "sudo restorecon -Rv /etc/NetworkManager/system-connections/ /etc/NetworkManager/conf.d/ /etc/default/ 2>&1"
+  register: _restorecon
+  changed_when: "'Relabeled' in _restorecon.stdout"
+
+- name: Reload NetworkManager to pick up fixed connections
+  ansible.builtin.shell:
+    cmd: >-
+      {{ _ssh_cmd }} "sudo nmcli con reload && sudo nmcli con up ens5-static 2>&1 || true"
+  register: _nm_reload
+
+- name: Wait for ens5 to get IP
+  ansible.builtin.shell:
+    cmd: >-
+      {{ _ssh_cmd }} "ip -4 addr show ens5 2>/dev/null | grep -oP 'inet \K[0-9.]+'"
+  register: _ens5_ip
+  until: _ens5_ip.rc == 0 and _ens5_ip.stdout | trim | length > 0
+  retries: 30
+  delay: 2
+  changed_when: false
+
 # --- Copy crypto + pull-secret to VM ---
 
 - name: Copy crypto directory to VM
