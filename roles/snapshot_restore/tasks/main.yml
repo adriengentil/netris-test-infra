@@ -318,7 +318,10 @@
 
 - name: Wait for VM to get management IP
   ansible.builtin.shell:
-    cmd: virsh domifaddr {{ ocp_vm_name }} | grep -oP '192\.168\.16\.\d+'
+    cmd: >-
+      virsh domifaddr {{ ocp_vm_name }} --source agent 2>/dev/null |
+      grep -oP '192\.168\.1[6-9]\.\d+|192\.168\.2[0-9]\.\d+|192\.168\.3[01]\.\d+' |
+      head -1
   register: _vm_mgmt_ip
   until: _vm_mgmt_ip.rc == 0 and _vm_mgmt_ip.stdout | trim | length > 0
   retries: 60
