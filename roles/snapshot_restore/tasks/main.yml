@@ -166,12 +166,27 @@
       ansible.builtin.set_fact:
         snapshot_source_ip: "{{ _src_ip_result.stdout | trim }}"
 
+    - name: Read etcd image from static pod manifest
+      ansible.builtin.shell:
+        cmd: >-
+          python3 -c "import yaml;
+          d=yaml.safe_load(open('{{ _deploy }}etc/kubernetes/manifests/etcd-pod.yaml'));
+          print([c['image'] for c in d['spec']['containers'] if c['name']=='etcd'][0])"
+      register: _etcd_image_result
+      changed_when: false
+      failed_when: false
+
+    - name: Set etcd image fact
+      ansible.builtin.set_fact:
+        snapshot_etcd_image: "{{ _etcd_image_result.stdout | default('') | trim }}"
+
     - name: Report source identity
       ansible.builtin.debug:
         msg: >-
           Source identity: hostname={{ snapshot_source_hostname }},
           cluster={{ snapshot_source_cluster }}.{{ snapshot_source_domain }},
-          ip={{ snapshot_source_ip }}
+          ip={{ snapshot_source_ip }},
+          etcd_image={{ snapshot_etcd_image | default('not found') }}
 
     # --- Write target config ---
 

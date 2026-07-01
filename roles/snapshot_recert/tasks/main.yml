@@ -50,23 +50,29 @@
 
 - name: Run recert with standalone etcd
   block:
-    - name: Detect etcd image in VM podman storage
+    - name: Set etcd image (from snapshot_restore fact or podman fallback)
       ansible.builtin.shell:
         cmd: >-
           {{ _ssh_cmd }} "sudo podman images --format '{{ '{{' }}.Repository{{ '}}' }}:{{ '{{' }}.Tag{{ '}}' }}'
           | grep etcd | head -1"
-      register: _etcd_image
+      register: _etcd_podman_image
       changed_when: false
+      when: snapshot_etcd_image | default('') | length == 0
+
+    - name: Set etcd image fact
+      ansible.builtin.set_fact:
+        _etcd_image: "{{ snapshot_etcd_image if (snapshot_etcd_image | default('') | length > 0) else _etcd_podman_image.stdout | trim }}"
 
     - name: Start standalone etcd for recert
       ansible.builtin.shell:
         cmd: >-
           {{ _ssh_cmd }} "sudo podman run -d --name etcd-recert
-          --network host --privileged
+          --network host --privileged --replace
           --pull=never
+          --authfile /var/lib/kubelet/config.json
           -v /var/lib/etcd:/store
           --entrypoint etcd
-          {{ _etcd_image.stdout | trim }}
+          {{ _etcd_image }}
           --name editor --data-dir /store
           --listen-client-urls http://localhost:2379
           --advertise-client-urls http://localhost:2379"
