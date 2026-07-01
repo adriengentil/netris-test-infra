@@ -50,13 +50,11 @@
 
 - name: Run recert with standalone etcd
   block:
-    - name: Detect etcd image on VM
+    - name: Read etcd image from flavor manifest
       ansible.builtin.shell:
         cmd: >-
-          {{ _ssh_cmd }} "sudo crictl images -o json" |
-          python3 -c "import json,sys; d=json.load(sys.stdin);
-          [print(t) for i in d['images'] for t in i.get('repoTags',[]) if 'etcd' in t]" |
-          head -1
+          python3 -c "import json; d=json.load(open('{{ snapshot_flavor_dir }}/manifest.json'));
+          print(d['metadata']['etcd_image'])"
       register: _etcd_image
       changed_when: false
 
