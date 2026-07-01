@@ -71,7 +71,7 @@ make setup
 make deploy
 
 # OR: Fast deployment (~25 min) — uses a pre-built snapshot with recert.
-# Faster but doesn't test the OCP installer or OSAC setup.sh flow.
+# Faster but doesn't test the OCP or OSAC installer flows.
 make deploy-fast
 
 # Then run a test flow
