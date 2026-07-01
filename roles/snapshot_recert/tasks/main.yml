@@ -4,7 +4,7 @@
     _ssh_cmd: >-
       ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10
       -i {{ snapshot_flavor_dir }}/crypto/cluster-tool.key
-      core@{{ _vm_mgmt_ip }}
+      core@{{ _vm_ssh_ip }}
     _scp_cmd: >-
       scp -o StrictHostKeyChecking=no
       -i {{ snapshot_flavor_dir }}/crypto/cluster-tool.key
@@ -34,11 +34,11 @@
 
 - name: Copy crypto directory to VM
   ansible.builtin.command:
-    cmd: "{{ _scp_cmd }} -r {{ snapshot_flavor_dir }}/crypto core@{{ _vm_mgmt_ip }}:/tmp/crypto"
+    cmd: "{{ _scp_cmd }} -r {{ snapshot_flavor_dir }}/crypto core@{{ _vm_ssh_ip }}:/tmp/crypto"
 
 - name: Copy pull-secret to VM
   ansible.builtin.command:
-    cmd: "{{ _scp_cmd }} {{ pull_secret_path }} core@{{ _vm_mgmt_ip }}:/tmp/crypto/pull-secret"
+    cmd: "{{ _scp_cmd }} {{ pull_secret_path }} core@{{ _vm_ssh_ip }}:/tmp/crypto/pull-secret"
 
 # --- Stop services ---
 

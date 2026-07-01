@@ -362,28 +362,16 @@
   ansible.builtin.command:
     cmd: virsh start {{ ocp_vm_name }}
 
-- name: Wait for VM to get management IP
-  ansible.builtin.shell:
-    cmd: >-
-      virsh domifaddr {{ ocp_vm_name }} --source agent 2>/dev/null |
-      grep -oP '192\.168\.1[6-9]\.\d+|192\.168\.2[0-9]\.\d+|192\.168\.3[01]\.\d+' |
-      head -1
-  register: _vm_mgmt_ip
-  until: _vm_mgmt_ip.rc == 0 and _vm_mgmt_ip.stdout | trim | length > 0
-  retries: 60
-  delay: 5
-  changed_when: false
-
-- name: Set management IP fact
+- name: Set SSH target IP (use DNAT IP since br-ex is on ens5, not management bridge)
   ansible.builtin.set_fact:
-    _vm_mgmt_ip: "{{ _vm_mgmt_ip.stdout | trim }}"
+    _vm_ssh_ip: "{{ ocp_dnat_ip }}"
 
-- name: Wait for SSH
+- name: Wait for SSH via DNAT IP
   ansible.builtin.command:
     cmd: >-
       ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5
       -i {{ snapshot_flavor_dir }}/crypto/cluster-tool.key
-      core@{{ _vm_mgmt_ip }} hostname
+      core@{{ _vm_ssh_ip }} hostname
   register: _ssh_check
   until: _ssh_check.rc == 0
   retries: 60
@@ -392,4 +380,4 @@
 
 - name: Report VM booted
   ansible.builtin.debug:
-    msg: "VM {{ ocp_vm_name }} booted, SSH accessible at {{ _vm_mgmt_ip }}"
+    msg: "VM {{ ocp_vm_name }} booted, SSH accessible at {{ _vm_ssh_ip }} (DNAT → {{ ocp_node_ip }})"
