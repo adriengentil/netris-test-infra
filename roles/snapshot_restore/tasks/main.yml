@@ -285,6 +285,13 @@
           chcon system_u:object_r:etc_t:s0 {{ _deploy }}etc/default/sno_dnsmasq_configuration_overrides
       changed_when: true
 
+    - name: Disable reverse path filter on ens4 for management access
+      ansible.builtin.copy:
+        content: |
+          net.ipv4.conf.ens4.rp_filter=0
+        dest: "{{ _deploy }}etc/sysctl.d/99-snapshot-rp-filter.conf"
+        mode: "0644"
+
     # --- Delete OVN/OVS state ---
 
     - name: Delete OVN/OVS databases and stale state
