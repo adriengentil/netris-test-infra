@@ -29,6 +29,14 @@
     force: true
   when: fulfillment_service_branch | default('') | length > 0
 
+- name: Rebuild osac CLI from fulfillment-service
+  ansible.builtin.command:
+    cmd: /usr/local/go/bin/go build -o /usr/local/bin/osac ./cmd/osac
+    chdir: "{{ osac_installer_dir }}/base/osac-fulfillment-service"
+  environment:
+    GOPATH: /root/go
+    GOCACHE: /root/.cache/go-build
+
 - name: Determine values directory
   ansible.builtin.set_fact:
     _values_dir: "{{ snapshot_osac_values_file | dirname }}"
