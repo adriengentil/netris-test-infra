@@ -81,9 +81,11 @@ After `make deploy-ocp`, the kubeconfig is at `/root/.kube/config`.
 | Target | Description | Time |
 |--------|-------------|------|
 | `make deploy` | Full pipeline: deploy-lab → deploy-ocp → deploy-osac | ~2-3 hrs |
-| `make setup` | Install prerequisites, cache images, build OCP/OSAC tools | ~10 min |
-| `make deploy-lab` | Deploy netris-lab (K3s, topology, VMs, connectivity) | ~30 min |
+| `make deploy-fast` | Snapshot pipeline: deploy-lab → deploy-ocp-snapshot | ~25 min |
+| `make setup` | Install prerequisites, cache images + snapshot flavor, build tools | ~10 min |
+| `make deploy-lab` | Deploy netris-lab (K3s, topology, VMs, connectivity) | ~12 min |
 | `make deploy-ocp` | Resize OCP VM + Netris networking + Assisted Service + OCP SNO | ~35-65 min |
+| `make deploy-ocp-snapshot` | Deploy OCP+OSAC from snapshot (recert + OSAC refresh) | ~13 min |
 | `make deploy-osac` | Prepare OSAC overlay + run setup.sh + filter OS images | ~30-60 min |
 
 ### CaaS (run after deploy)
@@ -125,10 +127,21 @@ After `make deploy-ocp`, the kubeconfig is at `/root/.kube/config`.
 
 ### Typical Workflows
 
-**First deploy on a fresh server:**
+**First deploy on a fresh server (fast path — snapshot):**
+```bash
+make setup          # install prerequisites, cache images + snapshot flavor, build tools
+make deploy-fast    # deploy lab + OCP+OSAC from snapshot (~25 min total)
+```
+
+**First deploy on a fresh server (full path — from scratch):**
 ```bash
 make setup          # install prerequisites, cache images, build tools
-make deploy         # deploy lab + OCP + OSAC
+make deploy         # deploy lab + OCP + OSAC (~2-3 hrs)
+```
+
+**Fast deploy with image overrides (test a PR build):**
+```bash
+make deploy-fast EXTRA_VARS="fulfillment_service_image=quay.io/osac/fulfillment-service:pr-123"
 ```
 
 **Re-deploy OSAC after code changes:**
@@ -157,7 +170,7 @@ make deploy-caas    # create cluster
 **Rebuild from scratch:**
 ```bash
 make destroy        # tear down everything
-make deploy         # full redeploy
+make deploy-fast    # full redeploy (snapshot path)
 ```
 
 ## Accessing OCP Routes
@@ -179,6 +192,20 @@ Then browse to `https://osac-aap-osac-devel.apps.ocp-sno.osac.local:9444` (accep
 | OCP Console | `https://console-openshift-console.apps.ocp-sno.osac.local:9444` |
 | Assisted Installer UI | `http://<server-ip>:8080` |
 | Netris Controller | `http://<server-ip>:9443` |
+
+## How deploy-ocp-snapshot Works
+
+`make deploy-ocp-snapshot` deploys OCP+OSAC in ~13 minutes from a pre-built VM snapshot instead of installing from scratch (~1.5 hours). It uses a golden qcow2 disk image from `quay.io/rh-ee-ovishlit/cluster-flavors:caas` containing a fully deployed OCP+OSAC cluster, then regenerates the cluster's identity (certificates, hostname, IP, domain) using [recert](https://github.com/rh-ecosystem-edge/recert).
+
+The flow runs five Ansible roles in sequence:
+
+1. **`netris_configure`** — creates VPC, VNet (DHCP disabled), subnet, SNAT/DNAT rules via Netris API
+2. **`ocp_dns`** — creates Route 53 DNS records and local dnsmasq config for the cluster domain
+3. **`snapshot_restore`** — creates copy-on-write disk overlays backed by the cached flavor, mounts the OS disk via qemu-nbd to write pre-boot config (hostname, nodeip hint, dnsmasq overrides, nmstate config for static IP, OVN/OVS cleanup), then boots the VM
+4. **`snapshot_recert`** — verifies br-ex has the correct IP, stops kubelet/crio, runs a standalone etcd container, deletes stale hypershift secrets, runs recert to regenerate all TLS certificates and cluster identity, then restarts services and waits for cluster health
+5. **`osac_refresh`** — clones osac-installer and runs `refresh-after-snapshot.py` which patches routes/certs for the new domain, runs helm upgrade, and configures AAP/fulfillment/tenants
+
+The snapshot flavor is pulled and cached during `make setup` (one-time ~60GB download). Subsequent deploys use copy-on-write overlays, so only changed blocks are written.
 
 ## How deploy-osac Works
 
@@ -224,6 +251,9 @@ make deploy-osac EXTRA_VARS='{"osac_installer_branch": "feature-x"}'
 | `caas_cluster_template` | `ocp_ci_small` | Cluster template for CaaS cluster creation |
 | `caas_cluster_name` | `caas-ci-cluster` | CaaS cluster name |
 | `caas_host_type_id` | `ci-worker` | Resource class for CaaS agents |
+| `snapshot_flavor_image` | `quay.io/rh-ee-ovishlit/cluster-flavors:caas` | OCI image containing the snapshot flavor |
+| `snapshot_osac_namespace` | `osac-e2e-ci` | OSAC namespace baked into the snapshot |
+| `snapshot_osac_values_file` | `values/caas-ci/values.yaml` | Helm values file for OSAC refresh |
 
 See [`inventory/group_vars/all.yml`](inventory/group_vars/all.yml) for the full list.
 
