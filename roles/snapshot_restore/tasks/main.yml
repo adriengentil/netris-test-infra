@@ -223,6 +223,24 @@
         dest: "{{ _deploy }}etc/NetworkManager/system-connections/ens5-static.nmconnection"
         mode: "0600"
 
+    - name: Write DHCP NM connection for ens4 (management bridge)
+      ansible.builtin.copy:
+        content: |
+          [connection]
+          id=ens4-mgmt
+          type=ethernet
+          interface-name=ens4
+          autoconnect=true
+          autoconnect-priority=50
+
+          [ipv4]
+          method=auto
+
+          [ipv6]
+          method=disabled
+        dest: "{{ _deploy }}etc/NetworkManager/system-connections/ens4-mgmt.nmconnection"
+        mode: "0600"
+
     # --- Delete OVN/OVS state ---
 
     - name: Delete OVN/OVS databases
