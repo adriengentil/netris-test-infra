@@ -64,13 +64,14 @@ aws_secret_access_key = <your-secret>
 aws_region = us-east-1
 EOF
 
-# Full deployment (setup → lab → OCP → OSAC) — installs from scratch
+# Install prerequisites and cache images (shared, run once)
 make setup
+
+# Full deployment — installs OCP + OSAC from scratch
 make deploy
 
 # OR: Fast deployment (~25 min) — uses a pre-built snapshot with recert.
 # Faster but doesn't test the OCP installer or OSAC setup.sh flow.
-make setup
 make deploy-fast
 
 # Then run a test flow
