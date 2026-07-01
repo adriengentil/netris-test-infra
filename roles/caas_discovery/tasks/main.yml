@@ -72,6 +72,16 @@
   register: _pull_secret
   no_log: true
 
+- name: Restart assisted-service to ensure auth keypair is stable
+  ansible.builtin.shell:
+    cmd: |
+      oc rollout restart deployment/assisted-service -n multicluster-engine
+      oc rollout restart statefulset/assisted-image-service -n multicluster-engine
+      oc rollout status deployment/assisted-service -n multicluster-engine --timeout=120s
+      oc rollout status statefulset/assisted-image-service -n multicluster-engine --timeout=120s
+  environment:
+    KUBECONFIG: /root/.kube/config
+
 - name: Create InfraEnv namespace
   ansible.builtin.command:
     cmd: oc create namespace {{ caas_discovery_infraenv_namespace }}
