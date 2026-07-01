@@ -64,15 +64,21 @@ aws_secret_access_key = <your-secret>
 aws_region = us-east-1
 EOF
 
-# Full deployment (setup → lab → OCP → OSAC)
+# Full deployment (setup → lab → OCP → OSAC) — installs from scratch
+make setup
 make deploy
+
+# OR: Fast deployment (~25 min) — uses a pre-built snapshot with recert.
+# Faster but doesn't test the OCP installer or OSAC setup.sh flow.
+make setup
+make deploy-fast
 
 # Then run a test flow
 make setup-caas    # CaaS setup: discover hosts, label agents, register host type
 make deploy-caas   # CaaS: create cluster
 ```
 
-After `make deploy-ocp`, the kubeconfig is at `/root/.kube/config`.
+After deployment, the kubeconfig is at `/root/.kube/config`.
 
 ## Make Targets
 
