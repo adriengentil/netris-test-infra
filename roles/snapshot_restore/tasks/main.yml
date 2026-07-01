@@ -71,10 +71,8 @@
 - name: Mount OS disk and configure pre-boot settings
   block:
     - name: Load nbd kernel module
-      community.general.modprobe:
-        name: nbd
-        params: max_part=8
-        state: present
+      ansible.builtin.command:
+        cmd: modprobe nbd max_part=8
 
     - name: Connect OS disk overlay to nbd
       ansible.builtin.command:
