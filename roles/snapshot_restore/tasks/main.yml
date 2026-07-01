@@ -276,6 +276,15 @@
         cmd: ln -sf /etc/systemd/system/snapshot-network-config.service {{ _deploy }}etc/systemd/system/multi-user.target.wants/snapshot-network-config.service
       changed_when: true
 
+    - name: Fix SELinux labels on written files
+      ansible.builtin.shell:
+        cmd: |
+          chcon system_u:object_r:systemd_unit_file_t:s0 {{ _deploy }}etc/systemd/system/snapshot-network-config.service
+          chcon -h system_u:object_r:systemd_unit_file_t:s0 {{ _deploy }}etc/systemd/system/multi-user.target.wants/snapshot-network-config.service
+          chcon system_u:object_r:etc_t:s0 {{ _deploy }}etc/snapshot-nmstate.yaml
+          chcon system_u:object_r:etc_t:s0 {{ _deploy }}etc/default/sno_dnsmasq_configuration_overrides
+      changed_when: true
+
     # --- Delete OVN/OVS state ---
 
     - name: Delete OVN/OVS databases and stale state
