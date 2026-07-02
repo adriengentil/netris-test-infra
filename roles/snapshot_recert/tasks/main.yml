@@ -159,11 +159,6 @@
     cmd: >-
       {{ _ssh_cmd }} "sudo cp /tmp/crypto/pull-secret /var/lib/kubelet/config.json"
 
-- name: Force static pod recreation by touching manifests
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "sudo find /etc/kubernetes/manifests -name '*.yaml' -exec touch {} +"
-
 - name: Start crio
   ansible.builtin.command:
     cmd: "{{ _ssh_cmd }} sudo systemctl start crio"
@@ -175,6 +170,15 @@
 - name: Start kubelet
   ansible.builtin.command:
     cmd: "{{ _ssh_cmd }} sudo systemctl start kubelet"
+
+- name: Wait for kubelet to start watching manifests
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: Force static pod recreation by touching manifests
+  ansible.builtin.shell:
+    cmd: >-
+      {{ _ssh_cmd }} "sudo find /etc/kubernetes/manifests -name '*.yaml' -exec touch {} +"
 
 # --- Wait for cluster health ---
 
