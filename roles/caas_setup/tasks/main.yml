@@ -104,7 +104,7 @@
 # Step 3: Register host type in fulfillment service
 - name: Get fulfillment internal API URL
   ansible.builtin.shell:
-    cmd: oc get route fulfillment-internal-api -n {{ osac_namespace }} -o jsonpath='{.status.ingress[0].host}'
+    cmd: oc get route fulfillment-internal-api -n {{ snapshot_osac_namespace | default(osac_namespace) }} -o jsonpath='{.status.ingress[0].host}'
   environment:
     KUBECONFIG: /root/.kube/config
   register: _fulfillment_host
@@ -119,7 +119,7 @@
 
 - name: Get service account token
   ansible.builtin.shell:
-    cmd: oc create token -n {{ osac_namespace }} admin
+    cmd: oc create token -n {{ snapshot_osac_namespace | default(osac_namespace) }} admin
   environment:
     KUBECONFIG: /root/.kube/config
   register: _sa_token
@@ -146,7 +146,7 @@
 # Step 4: Trigger AAP publish-templates job and wait for cluster template
 - name: Get AAP route
   ansible.builtin.shell:
-    cmd: oc get route osac-aap -n {{ osac_namespace }} -o jsonpath='{.spec.host}'
+    cmd: oc get route osac-aap -n {{ snapshot_osac_namespace | default(osac_namespace) }} -o jsonpath='{.spec.host}'
   environment:
     KUBECONFIG: /root/.kube/config
   register: _aap_route
@@ -157,7 +157,7 @@
 
 - name: Get AAP admin password
   ansible.builtin.shell:
-    cmd: oc get secret osac-aap-controller-admin-password -n {{ osac_namespace }} -o jsonpath='{.data.password}' | base64 -d
+    cmd: oc get secret osac-aap-controller-admin-password -n {{ snapshot_osac_namespace | default(osac_namespace) }} -o jsonpath='{.data.password}' | base64 -d
   environment:
     KUBECONFIG: /root/.kube/config
   register: _aap_admin_pw
@@ -236,7 +236,7 @@
   ansible.builtin.copy:
     content: |
       {
-        "token_script": "oc create token -n {{ osac_namespace }} admin --duration 1h",
+        "token_script": "oc create token -n {{ snapshot_osac_namespace | default(osac_namespace) }} admin --duration 1h",
         "insecure": true,
         "address": "{{ _fulfillment_host.stdout }}:443"
       }
