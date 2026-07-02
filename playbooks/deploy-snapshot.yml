@@ -1,5 +1,5 @@
 ---
-- name: Deploy OCP+OSAC from snapshot (fast path)
+- name: Deploy OCP from snapshot (recert)
   hosts: all
   gather_facts: false
   roles:
@@ -7,4 +7,3 @@
     - ocp_dns
     - snapshot_restore
     - snapshot_recert
-    - osac_refresh

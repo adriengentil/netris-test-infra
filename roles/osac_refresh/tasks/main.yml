@@ -109,17 +109,6 @@
     KUBECONFIG: /root/.kube/config
   changed_when: false
 
-- name: Run refresh-after-snapshot.py
-  ansible.builtin.shell:
-    cmd: python3 -u scripts/refresh-after-snapshot.py
-    chdir: "{{ osac_installer_dir }}"
-  environment:
-    KUBECONFIG: /root/.kube/config
-    VALUES_FILE: "{{ snapshot_osac_values_file }}"
-    INSTALLER_NAMESPACE: "{{ snapshot_osac_namespace }}"
-  register: _refresh_result
-  timeout: 1200
-
 - name: Create socat env file for OCP ingress (port 9444 → OCP 443)
   ansible.builtin.copy:
     dest: /etc/netris-lab/socat/0.0.0.0-9444.env

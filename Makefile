@@ -1,4 +1,5 @@
 .PHONY: deploy deploy-fast setup deploy-lab deploy-ocp deploy-ocp-snapshot deploy-osac \
+       snapshot-recert snapshot-refresh prep-snapshot-refresh run-snapshot-refresh \
        setup-caas deploy-caas \
        deploy-vmaas deploy-bmaas \
        destroy destroy-osac destroy-ocp destroy-caas destroy-vmaas destroy-bmaas \
@@ -60,8 +61,23 @@ deploy-bmaas:
 # Snapshot-based fast deployment
 deploy-fast: deploy-lab deploy-ocp-snapshot
 
-deploy-ocp-snapshot:
+deploy-ocp-snapshot: snapshot-recert snapshot-refresh
+
+snapshot-recert:
 	ansible-playbook playbooks/deploy-snapshot.yml $(ANSIBLE_EXTRA)
+
+snapshot-refresh: prep-snapshot-refresh run-snapshot-refresh
+
+prep-snapshot-refresh:
+	ansible-playbook playbooks/prep-snapshot-refresh.yml $(ANSIBLE_EXTRA)
+
+run-snapshot-refresh:
+	@echo "=== Running OSAC refresh with live output ==="
+	cd /opt/osac-installer && \
+		KUBECONFIG=/root/.kube/config \
+		VALUES_FILE=$(or $(SNAPSHOT_VALUES_FILE),values/caas-ci/values.yaml) \
+		INSTALLER_NAMESPACE=$(or $(SNAPSHOT_NAMESPACE),osac-e2e-ci) \
+		python3 -u scripts/refresh-after-snapshot.py
 
 # Destroy targets
 destroy:
