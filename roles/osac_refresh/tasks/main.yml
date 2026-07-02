@@ -120,6 +120,22 @@
   register: _refresh_result
   timeout: 1200
 
+- name: Create socat env file for OCP ingress (port 9444 → OCP 443)
+  ansible.builtin.copy:
+    dest: /etc/netris-lab/socat/0.0.0.0-9444.env
+    content: |
+      BIND_IP=0.0.0.0
+      PORT=9444
+      TARGET_IP={{ ocp_dnat_ip }}
+      TARGET_PORT=443
+
+- name: Enable and start OCP ingress socat forwarder
+  ansible.builtin.systemd:
+    name: socat-forwarder@0.0.0.0-9444
+    state: started
+    enabled: true
+    daemon_reload: true
+
 - name: Report OSAC refresh status
   ansible.builtin.debug:
     msg: "OSAC refresh completed in namespace {{ snapshot_osac_namespace }}"
