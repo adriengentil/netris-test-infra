@@ -1,5 +1,5 @@
 .PHONY: deploy deploy-fast setup deploy-lab deploy-ocp deploy-ocp-snapshot deploy-osac \
-       snapshot-recert snapshot-refresh prep-snapshot-refresh run-snapshot-refresh \
+       snapshot-recert snapshot-refresh prep-snapshot-refresh run-snapshot-refresh post-snapshot-refresh \
        setup-caas deploy-caas \
        deploy-vmaas deploy-bmaas \
        destroy destroy-osac destroy-ocp destroy-caas destroy-vmaas destroy-bmaas \
@@ -66,7 +66,7 @@ deploy-ocp-snapshot: snapshot-recert snapshot-refresh
 snapshot-recert:
 	ansible-playbook playbooks/deploy-snapshot.yml $(ANSIBLE_EXTRA)
 
-snapshot-refresh: prep-snapshot-refresh run-snapshot-refresh
+snapshot-refresh: prep-snapshot-refresh run-snapshot-refresh post-snapshot-refresh
 
 prep-snapshot-refresh:
 	ansible-playbook playbooks/prep-snapshot-refresh.yml $(ANSIBLE_EXTRA)
@@ -78,6 +78,9 @@ run-snapshot-refresh:
 		VALUES_FILE=$(or $(SNAPSHOT_VALUES_FILE),values/caas-ci/values.yaml) \
 		INSTALLER_NAMESPACE=$(or $(SNAPSHOT_NAMESPACE),osac-e2e-ci) \
 		python3 -u scripts/refresh-after-snapshot.py
+
+post-snapshot-refresh:
+	ansible-playbook playbooks/post-snapshot-refresh.yml $(ANSIBLE_EXTRA)
 
 # Destroy targets
 destroy:
