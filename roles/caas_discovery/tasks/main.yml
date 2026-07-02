@@ -119,13 +119,20 @@
     dest: /tmp/caas-infraenv.yml
     mode: "0600"
 
+- name: Delete existing InfraEnv to regenerate ISO token
+  ansible.builtin.command:
+    cmd: oc delete infraenv {{ caas_discovery_infraenv_name }} -n {{ caas_discovery_infraenv_namespace }} --ignore-not-found
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: true
+
 - name: Apply InfraEnv CR
   ansible.builtin.command:
     cmd: oc apply -f /tmp/caas-infraenv.yml
   environment:
     KUBECONFIG: /root/.kube/config
   register: _infraenv_apply
-  changed_when: "'configured' in _infraenv_apply.stdout"
+  changed_when: "'created' in _infraenv_apply.stdout or 'configured' in _infraenv_apply.stdout"
   until: _infraenv_apply.rc == 0
   retries: 10
   delay: 15
