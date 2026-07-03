@@ -436,8 +436,91 @@
   changed_when: false
   failed_when: false
 
+- name: Gather OVN/OVS database state from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== OVN/OVS database files ==="
+      sudo ls -la /etc/openvswitch/conf.db /etc/ovn/ovnsb_db.db /etc/ovn/ovnnb_db.db 2>&1
+      echo
+      echo "=== OVN IC state ==="
+      sudo ls -laR /var/lib/ovn-ic/etc 2>&1 || echo "no ovn-ic state"
+    ' > {{ _gather_dir }}/lab/ocp/node/ovn-db-state 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/ovn-db-state
+  changed_when: false
+  failed_when: false
+
 - name: Gather network interfaces from SNO VM
   ansible.builtin.shell: "{{ _sno_ssh }} 'ip -4 addr show && echo --- && ip route show' > {{ _gather_dir }}/lab/ocp/node/network-interfaces 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/network-interfaces"
+  changed_when: false
+  failed_when: false
+
+- name: Gather NetworkManager connections from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== Active connections ==="
+      sudo nmcli -t connection show --active 2>&1
+      echo
+      echo "=== All connections ==="
+      sudo nmcli -t connection show 2>&1
+      echo
+      echo "=== NM system-connections files ==="
+      sudo ls -la /etc/NetworkManager/system-connections/ 2>&1
+      echo
+      echo "=== Connection details ==="
+      for f in /etc/NetworkManager/system-connections/*.nmconnection; do
+        [ -f "$f" ] || continue
+        echo "--- $f ---"
+        sudo cat "$f" 2>&1
+        echo
+      done
+    ' > {{ _gather_dir }}/lab/ocp/node/nm-connections 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/nm-connections
+  changed_when: false
+  failed_when: false
+
+- name: Gather boot-time service status from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      for svc in snapshot-network-config ovs-configuration nodeip-configuration NetworkManager; do
+        echo "=== $svc ==="
+        sudo systemctl status "$svc" --no-pager 2>&1
+        echo
+      done
+    ' > {{ _gather_dir }}/lab/ocp/node/boot-services 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/boot-services
+  changed_when: false
+  failed_when: false
+
+- name: Gather snapshot-nmstate.yaml from SNO VM (present means it was never applied)
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo cat /etc/snapshot-nmstate.yaml 2>&1 || echo \"(file absent — nmstatectl applied and removed it)\"' > {{ _gather_dir }}/lab/ocp/node/snapshot-nmstate 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/snapshot-nmstate"
+  changed_when: false
+  failed_when: false
+
+- name: Gather snapshot config overrides from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== hostname ==="
+      cat /etc/hostname 2>&1
+      echo
+      echo "=== nodeip-configuration ==="
+      cat /etc/default/nodeip-configuration 2>&1
+      echo
+      echo "=== sno_dnsmasq_configuration_overrides ==="
+      cat /etc/default/sno_dnsmasq_configuration_overrides 2>&1
+    ' > {{ _gather_dir }}/lab/ocp/node/snapshot-config 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/snapshot-config
+  changed_when: false
+  failed_when: false
+
+- name: Gather static pod manifests from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== manifest files ==="
+      sudo ls -la /etc/kubernetes/manifests/ 2>&1
+      echo
+      for f in /etc/kubernetes/manifests/*.yaml; do
+        [ -f "$f" ] || continue
+        echo "--- $f ---"
+        sudo head -5 "$f" 2>&1
+        echo
+      done
+    ' > {{ _gather_dir }}/lab/ocp/node/static-pod-manifests 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/static-pod-manifests
   changed_when: false
   failed_when: false
 
@@ -453,6 +536,18 @@
 
 - name: Gather systemd failed units from SNO VM
   ansible.builtin.shell: "{{ _sno_ssh }} 'sudo systemctl --failed --no-pager' > {{ _gather_dir }}/lab/ocp/node/failed-units 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/failed-units"
+  changed_when: false
+  failed_when: false
+
+- name: Gather MCD state from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== machine-config-daemon currentconfig ==="
+      sudo cat /etc/machine-config-daemon/currentconfig 2>&1 | head -50
+      echo
+      echo "=== machine-config-daemon state ==="
+      sudo ls -la /etc/machine-config-daemon/ 2>&1
+    ' > {{ _gather_dir }}/lab/ocp/node/mcd-state 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/mcd-state
   changed_when: false
   failed_when: false
 
