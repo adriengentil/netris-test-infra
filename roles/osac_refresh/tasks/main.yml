@@ -5,6 +5,7 @@
     dest: "{{ osac_installer_dir }}"
     version: "{{ osac_installer_branch }}"
     force: true
+  when: not (osac_installer_skip_clone | default(false) | bool)
 
 - name: Initialize submodules
   ansible.builtin.command:
@@ -12,6 +13,7 @@
     chdir: "{{ osac_installer_dir }}"
   register: _submodule_update
   changed_when: _submodule_update.stdout | length > 0
+  when: not (osac_installer_skip_clone | default(false) | bool)
 
 - name: Override osac-operator code in installer
   ansible.builtin.git:
@@ -19,7 +21,9 @@
     dest: "{{ osac_installer_dir }}/base/osac-operator"
     version: "{{ osac_operator_branch }}"
     force: true
-  when: osac_operator_branch | default('') | length > 0
+  when:
+    - not (osac_installer_skip_clone | default(false) | bool)
+    - osac_operator_branch | default('') | length > 0
 
 - name: Override fulfillment-service code in installer
   ansible.builtin.git:
@@ -27,7 +31,9 @@
     dest: "{{ osac_installer_dir }}/base/osac-fulfillment-service"
     version: "{{ fulfillment_service_branch }}"
     force: true
-  when: fulfillment_service_branch | default('') | length > 0
+  when:
+    - not (osac_installer_skip_clone | default(false) | bool)
+    - fulfillment_service_branch | default('') | length > 0
 
 - name: Rebuild osac CLI from fulfillment-service
   ansible.builtin.command:
@@ -36,6 +42,7 @@
   environment:
     GOPATH: /root/go
     GOCACHE: /root/.cache/go-build
+  when: not (osac_installer_skip_clone | default(false) | bool)
 
 - name: Determine values directory
   ansible.builtin.set_fact:
