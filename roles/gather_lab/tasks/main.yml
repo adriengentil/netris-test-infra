@@ -561,6 +561,72 @@
   changed_when: false
   failed_when: false
 
+- name: Gather recert summary from SNO VM
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo cat /var/tmp/recert-summary.yaml 2>&1 || echo \"(not found)\"' > {{ _gather_dir }}/lab/ocp/node/recert-summary 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/recert-summary"
+  changed_when: false
+  failed_when: false
+
+- name: Gather kubelet node IP config from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== nodeip-configuration primary-ip ==="
+      sudo cat /run/nodeip-configuration/primary-ip 2>&1 || echo "(not found — nodeip-configuration may not have run)"
+      echo
+      echo "=== kubelet nodenet drop-in ==="
+      sudo cat /etc/systemd/system/kubelet.service.d/20-nodenet.conf 2>&1 || echo "(not found)"
+    ' > {{ _gather_dir }}/lab/ocp/node/kubelet-nodeip 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/kubelet-nodeip
+  changed_when: false
+  failed_when: false
+
+- name: Gather kubelet certificates from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== kubelet PKI files ==="
+      sudo ls -la /var/lib/kubelet/pki/ 2>&1
+      echo
+      echo "=== kubelet-client-current.pem expiry ==="
+      sudo openssl x509 -in /var/lib/kubelet/pki/kubelet-client-current.pem -noout -dates -subject 2>&1 || echo "(not found or invalid)"
+      echo
+      echo "=== kubelet-server-current.pem expiry ==="
+      sudo openssl x509 -in /var/lib/kubelet/pki/kubelet-server-current.pem -noout -dates -subject 2>&1 || echo "(not found or invalid)"
+    ' > {{ _gather_dir }}/lab/ocp/node/kubelet-certs 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/kubelet-certs
+  changed_when: false
+  failed_when: false
+
+- name: Gather SNO VM dnsmasq config
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== dnsmasq service ==="
+      sudo systemctl status dnsmasq --no-pager 2>&1
+      echo
+      echo "=== dnsmasq configs ==="
+      sudo ls -la /etc/dnsmasq.d/ 2>&1
+      echo
+      for f in /etc/dnsmasq.d/*.conf; do
+        [ -f "$f" ] || continue
+        echo "--- $f ---"
+        sudo cat "$f" 2>&1
+        echo
+      done
+    ' > {{ _gather_dir }}/lab/ocp/node/dnsmasq 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/dnsmasq
+  changed_when: false
+  failed_when: false
+
+- name: Gather podman containers from SNO VM
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo podman ps -a --format \"table {{{{.ID}}}} {{{{.Names}}}} {{{{.Status}}}} {{{{.Image}}}}\"' > {{ _gather_dir }}/lab/ocp/node/podman-containers 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/podman-containers"
+  changed_when: false
+  failed_when: false
+
+- name: Gather rpm-ostree status from SNO VM
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo rpm-ostree status' > {{ _gather_dir }}/lab/ocp/node/rpm-ostree-status 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/rpm-ostree-status"
+  changed_when: false
+  failed_when: false
+
+- name: Gather etcd data directory state from SNO VM
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo ls -la /var/lib/etcd/ 2>&1 && echo --- && sudo ls -la /var/lib/etcd/member/snap/ 2>&1' > {{ _gather_dir }}/lab/ocp/node/etcd-data-state 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/etcd-data-state"
+  changed_when: false
+  failed_when: false
+
 # ── OCP prerequisite operators ──
 - name: Gather operator CSV status across namespaces
   ansible.builtin.shell: oc get csv --all-namespaces -o wide > {{ _gather_dir }}/lab/ocp/operators/csvs 2>&1 || echo "unavailable" > {{ _gather_dir }}/lab/ocp/operators/csvs
