@@ -18,18 +18,6 @@
   ansible.builtin.set_fact:
     _ingress_cn: "{{ _ingress_cn_raw.content | b64decode | trim }}"
 
-# --- Verify br-ex has correct IP (set by snapshot-network-config.service during boot) ---
-
-- name: Wait for br-ex to have correct IP
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "ip -4 addr show br-ex 2>/dev/null | grep -oP 'inet \K[0-9.]+'"
-  register: _brex_ip
-  until: _brex_ip.rc == 0 and _brex_ip.stdout | trim == ocp_node_ip
-  retries: 60
-  delay: 5
-  changed_when: false
-
 # --- Copy crypto + pull-secret to VM ---
 
 - name: Copy crypto directory to VM
@@ -40,15 +28,19 @@
   ansible.builtin.command:
     cmd: "{{ _scp_cmd }} {{ pull_secret_path }} core@{{ _vm_ssh_ip }}:/tmp/crypto/pull-secret"
 
-# --- Stop services ---
+# --- Clean pod state and stop crio (kubelet is masked, never started) ---
 
-- name: Stop kubelet
-  ansible.builtin.command:
-    cmd: "{{ _ssh_cmd }} sudo systemctl stop kubelet"
+- name: Stop all crio containers
+  ansible.builtin.shell:
+    cmd: >-
+      {{ _ssh_cmd }} "sudo crictl stop --timeout 5 \$(sudo crictl ps -q 2>/dev/null) 2>/dev/null || true"
+  changed_when: false
 
-- name: Wait for kubelet to stop
-  ansible.builtin.pause:
-    seconds: 5
+- name: Remove all pod sandboxes
+  ansible.builtin.shell:
+    cmd: >-
+      {{ _ssh_cmd }} "sudo crictl rmp -f --all 2>/dev/null || true"
+  changed_when: false
 
 - name: Stop crio
   ansible.builtin.command:
@@ -119,6 +111,7 @@
           -v /var/lib/kubelet:/var/lib/kubelet
           -v /etc/machine-config-daemon:/etc/machine-config-daemon
           -v /etc/cni:/etc/cni
+          -v /var/tmp:/var/tmp
           -v /tmp/crypto:/tmp/crypto:ro
           {{ snapshot_recert_image }}
           --etcd-endpoint localhost:2379
@@ -143,7 +136,8 @@
           --cn-san-replace {{ snapshot_source_hostname }}:{{ ocp_vm_name }}
           --cn-san-replace system:node:{{ snapshot_source_hostname }},system:node:{{ ocp_vm_name }}
           --cn-san-replace {{ snapshot_source_ip }}:{{ ocp_node_ip }}
-          --extend-expiration"
+          --extend-expiration
+          --summary-file-clean /var/tmp/recert-summary.yaml"
       register: _recert_result
       timeout: 600
 
@@ -154,11 +148,6 @@
           {{ _ssh_cmd }} "sudo podman stop etcd-recert 2>/dev/null; sudo podman rm etcd-recert 2>/dev/null"
       failed_when: false
 
-- name: Fix pull-secret on disk (recert writes path instead of content)
-  ansible.builtin.shell:
-    cmd: >-
-      {{ _ssh_cmd }} "sudo cp /tmp/crypto/pull-secret /var/lib/kubelet/config.json"
-
 - name: Start crio
   ansible.builtin.command:
     cmd: "{{ _ssh_cmd }} sudo systemctl start crio"
@@ -166,6 +155,11 @@
 - name: Wait for crio
   ansible.builtin.pause:
     seconds: 3
+
+- name: Unmask kubelet
+  ansible.builtin.shell:
+    cmd: >-
+      {{ _ssh_cmd }} "sudo rm -f /etc/systemd/system/kubelet.service && sudo systemctl daemon-reload"
 
 - name: Start kubelet
   ansible.builtin.command:
@@ -216,20 +210,6 @@
     content: "{{ _kubeconfig_content.stdout }}"
     dest: /root/.kube/config
     mode: "0600"
-
-# --- Fix pull-secret in etcd (recert writes path instead of content) ---
-
-- name: Fix pull-secret in openshift-config
-  ansible.builtin.shell:
-    cmd: >-
-      oc set data secret/pull-secret -n openshift-config
-      --from-file=.dockerconfigjson={{ pull_secret_path }}
-  environment:
-    KUBECONFIG: /root/.kube/config
-  register: _fix_pull_secret
-  until: _fix_pull_secret.rc == 0
-  retries: 10
-  delay: 10
 
 # --- Wait for cluster ready ---
 

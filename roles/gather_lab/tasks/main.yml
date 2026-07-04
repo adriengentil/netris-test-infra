@@ -16,6 +16,9 @@
     - assisted-installer
     - ocp
     - ocp/operators
+    - ocp/mco
+    - ocp/networking
+    - ocp/node
     - osac
     - osac/prerequisites
     - dns
@@ -236,6 +239,11 @@
   changed_when: false
   failed_when: false
 
+# ── SNO VM SSH helper ──
+- name: Set SNO VM SSH command
+  ansible.builtin.set_fact:
+    _sno_ssh: "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -i {{ snapshot_flavor_dir }}/crypto/cluster-tool.key core@{{ ocp_dnat_ip }}"
+
 # ── OCP cluster ──
 - name: Gather OCP nodes
   ansible.builtin.shell: oc get nodes -o wide > {{ _gather_dir }}/lab/ocp/nodes 2>&1 || echo "OCP not reachable" > {{ _gather_dir }}/lab/ocp/nodes
@@ -290,6 +298,344 @@
   ansible.builtin.shell: oc adm top pod --all-namespaces --sum > {{ _gather_dir }}/lab/ocp/top-pods 2>&1 || echo "metrics unavailable" > {{ _gather_dir }}/lab/ocp/top-pods
   environment:
     KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+# ── OCP MCO (Machine Config Operator) ──
+- name: Gather MCO pods
+  ansible.builtin.shell: oc get pods -n openshift-machine-config-operator -o wide > {{ _gather_dir }}/lab/ocp/mco/pods 2>&1 || echo "namespace not found" > {{ _gather_dir }}/lab/ocp/mco/pods
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather MCO daemonsets
+  ansible.builtin.shell: oc get daemonsets -n openshift-machine-config-operator -o wide > {{ _gather_dir }}/lab/ocp/mco/daemonsets 2>&1 || echo "unavailable" > {{ _gather_dir }}/lab/ocp/mco/daemonsets
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather MCO deployments
+  ansible.builtin.shell: oc get deployments -n openshift-machine-config-operator -o wide > {{ _gather_dir }}/lab/ocp/mco/deployments 2>&1 || echo "unavailable" > {{ _gather_dir }}/lab/ocp/mco/deployments
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather MachineConfigPool status
+  ansible.builtin.shell: oc get machineconfigpools -o wide > {{ _gather_dir }}/lab/ocp/mco/machineconfigpools 2>&1 || echo "unavailable" > {{ _gather_dir }}/lab/ocp/mco/machineconfigpools
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather MCO pod logs (last 100 lines per pod)
+  ansible.builtin.shell: |
+    for pod in $(oc get pods -n openshift-machine-config-operator --no-headers -o custom-columns=':metadata.name' 2>/dev/null); do
+      echo "=== $pod ==="
+      oc logs "$pod" -n openshift-machine-config-operator --tail=100 2>&1
+      echo
+    done > {{ _gather_dir }}/lab/ocp/mco/pod-logs 2>&1
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather MCO events
+  ansible.builtin.shell: oc get events -n openshift-machine-config-operator --sort-by=.lastTimestamp > {{ _gather_dir }}/lab/ocp/mco/events 2>&1 || echo "no events" > {{ _gather_dir }}/lab/ocp/mco/events
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+# ── OCP networking (OVN-Kubernetes) ──
+- name: Gather OVN-Kubernetes pods
+  ansible.builtin.shell: oc get pods -n openshift-ovn-kubernetes -o wide > {{ _gather_dir }}/lab/ocp/networking/ovn-pods 2>&1 || echo "namespace not found" > {{ _gather_dir }}/lab/ocp/networking/ovn-pods
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather OVN-Kubernetes daemonsets
+  ansible.builtin.shell: oc get daemonsets -n openshift-ovn-kubernetes -o wide > {{ _gather_dir }}/lab/ocp/networking/ovn-daemonsets 2>&1 || echo "unavailable" > {{ _gather_dir }}/lab/ocp/networking/ovn-daemonsets
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather OVN-Kubernetes pod logs (last 100 lines per container)
+  ansible.builtin.shell: |
+    for pod in $(oc get pods -n openshift-ovn-kubernetes --no-headers -o custom-columns=':metadata.name' 2>/dev/null); do
+      for ctr in $(oc get pod "$pod" -n openshift-ovn-kubernetes -o jsonpath='{.spec.containers[*].name}' 2>/dev/null); do
+        echo "=== $pod / $ctr ==="
+        oc logs "$pod" -n openshift-ovn-kubernetes -c "$ctr" --tail=100 2>&1
+        echo
+      done
+    done > {{ _gather_dir }}/lab/ocp/networking/ovn-pod-logs 2>&1
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather OVN-Kubernetes events
+  ansible.builtin.shell: oc get events -n openshift-ovn-kubernetes --sort-by=.lastTimestamp > {{ _gather_dir }}/lab/ocp/networking/ovn-events 2>&1 || echo "no events" > {{ _gather_dir }}/lab/ocp/networking/ovn-events
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather network operator status
+  ansible.builtin.shell: oc get network.operator cluster -o yaml > {{ _gather_dir }}/lab/ocp/networking/network-operator 2>&1 || echo "unavailable" > {{ _gather_dir }}/lab/ocp/networking/network-operator
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+- name: Gather cluster-wide events (last 50)
+  ansible.builtin.shell: oc get events --all-namespaces --sort-by=.lastTimestamp 2>&1 | tail -60 > {{ _gather_dir }}/lab/ocp/networking/cluster-events-recent 2>&1 || echo "unavailable" > {{ _gather_dir }}/lab/ocp/networking/cluster-events-recent
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  failed_when: false
+
+# ── SNO VM node-level diagnostics (via SSH) ──
+- name: Gather kubelet journal from SNO VM
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo journalctl -u kubelet --no-pager -n 200' > {{ _gather_dir }}/lab/ocp/node/kubelet-journal 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/kubelet-journal"
+  changed_when: false
+  failed_when: false
+
+- name: Gather crio journal from SNO VM
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo journalctl -u crio --no-pager -n 200' > {{ _gather_dir }}/lab/ocp/node/crio-journal 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/crio-journal"
+  changed_when: false
+  failed_when: false
+
+- name: Gather CNI config directory from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      sudo ls -la /etc/kubernetes/cni/net.d/ 2>&1
+      echo ---
+      for f in /etc/kubernetes/cni/net.d/*.conf /etc/kubernetes/cni/net.d/*.conflist; do
+        [ -f "$f" ] || continue
+        echo "--- $f ---"
+        sudo cat "$f" 2>&1
+        echo
+      done
+    ' > {{ _gather_dir }}/lab/ocp/node/cni-config 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/cni-config
+  changed_when: false
+  failed_when: false
+
+- name: Gather OVS/OVN status from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== OVS service ==="
+      sudo systemctl status ovs-vswitchd --no-pager 2>&1
+      echo
+      echo "=== OVN controller service ==="
+      sudo systemctl status ovn-controller --no-pager 2>&1
+      echo
+      echo "=== OVS bridges ==="
+      sudo ovs-vsctl show 2>&1
+      echo
+      echo "=== br-int ports ==="
+      sudo ovs-vsctl list-ports br-int 2>&1
+      echo
+      echo "=== br-ex ports ==="
+      sudo ovs-vsctl list-ports br-ex 2>&1
+    ' > {{ _gather_dir }}/lab/ocp/node/ovs-ovn-status 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/ovs-ovn-status
+  changed_when: false
+  failed_when: false
+
+- name: Gather OVN/OVS database state from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== OVN/OVS database files ==="
+      sudo ls -la /etc/openvswitch/conf.db /etc/ovn/ovnsb_db.db /etc/ovn/ovnnb_db.db 2>&1
+      echo
+      echo "=== OVN IC state ==="
+      sudo ls -laR /var/lib/ovn-ic/etc 2>&1 || echo "no ovn-ic state"
+    ' > {{ _gather_dir }}/lab/ocp/node/ovn-db-state 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/ovn-db-state
+  changed_when: false
+  failed_when: false
+
+- name: Gather network interfaces from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== Link state ==="
+      ip -d link show 2>&1
+      echo
+      echo "=== Addresses ==="
+      ip addr show 2>&1
+      echo
+      echo "=== Routes ==="
+      ip route show 2>&1
+    ' > {{ _gather_dir }}/lab/ocp/node/network-interfaces 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/network-interfaces
+  changed_when: false
+  failed_when: false
+
+- name: Gather NetworkManager connections from SNO VM (secrets redacted)
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== Active connections ==="
+      sudo nmcli -t connection show --active 2>&1
+      echo
+      echo "=== All connections ==="
+      sudo nmcli -t connection show 2>&1
+      echo
+      echo "=== NM system-connections files ==="
+      sudo ls -la /etc/NetworkManager/system-connections/ 2>&1
+      echo
+      echo "=== Connection details (secrets redacted) ==="
+      for f in /etc/NetworkManager/system-connections/*.nmconnection; do
+        [ -f "$f" ] || continue
+        echo "--- $f ---"
+        sudo cat "$f" 2>&1 | sed -E "s/^(psk|password|secret|key)=.*/\1=<REDACTED>/i"
+        echo
+      done
+    ' > {{ _gather_dir }}/lab/ocp/node/nm-connections 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/nm-connections
+  changed_when: false
+  failed_when: false
+
+- name: Gather boot-time service status from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      for svc in snapshot-network-config ovs-configuration nodeip-configuration NetworkManager; do
+        echo "=== $svc ==="
+        sudo systemctl status "$svc" --no-pager 2>&1
+        echo
+      done
+    ' > {{ _gather_dir }}/lab/ocp/node/boot-services 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/boot-services
+  changed_when: false
+  failed_when: false
+
+- name: Gather snapshot-nmstate.yaml from SNO VM (present means never applied)
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo cat /etc/snapshot-nmstate.yaml 2>&1 || echo \"(file absent — nmstatectl applied and removed it)\"' > {{ _gather_dir }}/lab/ocp/node/snapshot-nmstate 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/snapshot-nmstate"
+  changed_when: false
+  failed_when: false
+
+- name: Gather snapshot config overrides from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== hostname ==="
+      cat /etc/hostname 2>&1
+      echo
+      echo "=== nodeip-configuration ==="
+      cat /etc/default/nodeip-configuration 2>&1
+      echo
+      echo "=== sno_dnsmasq_configuration_overrides ==="
+      cat /etc/default/sno_dnsmasq_configuration_overrides 2>&1
+    ' > {{ _gather_dir }}/lab/ocp/node/snapshot-config 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/snapshot-config
+  changed_when: false
+  failed_when: false
+
+- name: Gather static pod manifests from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== manifest files ==="
+      sudo ls -la /etc/kubernetes/manifests/ 2>&1
+      echo
+      for f in /etc/kubernetes/manifests/*.yaml; do
+        [ -f "$f" ] || continue
+        echo "--- $f ---"
+        sudo head -5 "$f" 2>&1
+        echo
+      done
+    ' > {{ _gather_dir }}/lab/ocp/node/static-pod-manifests 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/static-pod-manifests
+  changed_when: false
+  failed_when: false
+
+- name: Gather crictl pods from SNO VM
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo crictl pods' > {{ _gather_dir }}/lab/ocp/node/crictl-pods 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/crictl-pods"
+  changed_when: false
+  failed_when: false
+
+- name: Gather crictl containers from SNO VM
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo crictl ps -a' > {{ _gather_dir }}/lab/ocp/node/crictl-containers 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/crictl-containers"
+  changed_when: false
+  failed_when: false
+
+- name: Gather systemd failed units from SNO VM
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo systemctl --failed --no-pager' > {{ _gather_dir }}/lab/ocp/node/failed-units 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/failed-units"
+  changed_when: false
+  failed_when: false
+
+- name: Gather MCD state from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== machine-config-daemon directory ==="
+      sudo ls -la /etc/machine-config-daemon/ 2>&1
+    ' > {{ _gather_dir }}/lab/ocp/node/mcd-state 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/mcd-state
+  changed_when: false
+  failed_when: false
+
+- name: Gather recert summary from SNO VM (secrets redacted)
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} 'sudo cat /var/tmp/recert-summary.yaml 2>/dev/null || echo "(not found)"' \
+      | sed -E \
+        -e '/BEGIN (RSA |EC )?PRIVATE KEY/,/END (RSA |EC )?PRIVATE KEY/c\<PRIVATE KEY REDACTED>' \
+        -e 's/("\.dockerconfigjson"|"pull-secret"|"password"|"token"|"secret"):[[:space:]]*"[^"]*"/\1: "<REDACTED>"/g' \
+      > {{ _gather_dir }}/lab/ocp/node/recert-summary 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/recert-summary
+  changed_when: false
+  failed_when: false
+
+- name: Gather kubelet node IP config from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== nodeip-configuration primary-ip ==="
+      sudo cat /run/nodeip-configuration/primary-ip 2>&1 || echo "(not found)"
+      echo
+      echo "=== kubelet nodenet drop-in ==="
+      sudo cat /etc/systemd/system/kubelet.service.d/20-nodenet.conf 2>&1 || echo "(not found)"
+    ' > {{ _gather_dir }}/lab/ocp/node/kubelet-nodeip 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/kubelet-nodeip
+  changed_when: false
+  failed_when: false
+
+- name: Gather kubelet certificates from SNO VM
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== kubelet PKI files ==="
+      sudo ls -la /var/lib/kubelet/pki/ 2>&1
+      echo
+      echo "=== kubelet-client-current.pem ==="
+      sudo openssl x509 -in /var/lib/kubelet/pki/kubelet-client-current.pem -noout -dates -subject 2>&1 || echo "(not found)"
+      echo
+      echo "=== kubelet-server-current.pem ==="
+      sudo openssl x509 -in /var/lib/kubelet/pki/kubelet-server-current.pem -noout -dates -subject 2>&1 || echo "(not found)"
+    ' > {{ _gather_dir }}/lab/ocp/node/kubelet-certs 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/kubelet-certs
+  changed_when: false
+  failed_when: false
+
+- name: Gather SNO VM dnsmasq config
+  ansible.builtin.shell: |
+    {{ _sno_ssh }} '
+      echo "=== dnsmasq service ==="
+      sudo systemctl status dnsmasq --no-pager 2>&1
+      echo
+      echo "=== dnsmasq configs ==="
+      sudo ls -la /etc/dnsmasq.d/ 2>&1
+      echo
+      for f in /etc/dnsmasq.d/*.conf; do
+        [ -f "$f" ] || continue
+        echo "--- $f ---"
+        sudo cat "$f" 2>&1
+        echo
+      done
+    ' > {{ _gather_dir }}/lab/ocp/node/dnsmasq 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/dnsmasq
+  changed_when: false
+  failed_when: false
+
+- name: Gather podman containers from SNO VM
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo podman ps -a' > {{ _gather_dir }}/lab/ocp/node/podman-containers 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/podman-containers"
+  changed_when: false
+  failed_when: false
+
+- name: Gather rpm-ostree status from SNO VM
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo rpm-ostree status' > {{ _gather_dir }}/lab/ocp/node/rpm-ostree-status 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/rpm-ostree-status"
+  changed_when: false
+  failed_when: false
+
+- name: Gather etcd data directory state from SNO VM
+  ansible.builtin.shell: "{{ _sno_ssh }} 'sudo ls -la /var/lib/etcd/ 2>&1 && echo --- && sudo ls -la /var/lib/etcd/member/snap/ 2>&1' > {{ _gather_dir }}/lab/ocp/node/etcd-data-state 2>&1 || echo 'SSH unreachable' > {{ _gather_dir }}/lab/ocp/node/etcd-data-state"
   changed_when: false
   failed_when: false
 
