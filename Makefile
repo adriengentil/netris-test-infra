@@ -14,7 +14,7 @@ ANSIBLE_EXTRA = $(if $(EXTRA_VARS),-e '$(EXTRA_VARS)')
 deploy: deploy-lab deploy-ocp deploy-osac
 
 setup:
-	ansible-playbook playbooks/setup-lab.yml $(ANSIBLE_EXTRA)
+	ansible-playbook playbooks/setup.yml $(ANSIBLE_EXTRA)
 
 deploy-lab:
 	ansible-playbook playbooks/deploy-lab.yml $(ANSIBLE_EXTRA)
@@ -29,7 +29,7 @@ deploy-ocp:
 deploy-osac: prep-osac run-osac-setup post-osac
 
 prep-osac:
-	ansible-playbook playbooks/install-osac.yml $(ANSIBLE_EXTRA)
+	ansible-playbook playbooks/prep-osac.yml $(ANSIBLE_EXTRA)
 
 run-osac-setup:
 	@echo "=== Rebuilding Helm chart dependencies ==="
@@ -64,7 +64,7 @@ deploy-fast: deploy-lab deploy-ocp-snapshot
 deploy-ocp-snapshot: snapshot-recert snapshot-refresh
 
 snapshot-recert:
-	ansible-playbook playbooks/deploy-snapshot.yml $(ANSIBLE_EXTRA)
+	ansible-playbook playbooks/snapshot-recert.yml $(ANSIBLE_EXTRA)
 
 snapshot-refresh: prep-snapshot-refresh run-snapshot-refresh post-snapshot-refresh
 
@@ -95,7 +95,7 @@ destroy-osac:
 	rm -f /tmp/osac-setup.env
 
 destroy-ocp:
-	ansible-playbook playbooks/reset-ocp.yml $(ANSIBLE_EXTRA)
+	ansible-playbook playbooks/destroy-ocp.yml $(ANSIBLE_EXTRA)
 
 destroy-caas:
 	@echo "CaaS teardown is not yet implemented"
