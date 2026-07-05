@@ -1,4 +1,17 @@
 ---
+- name: Detect effective OSAC namespace
+  ansible.builtin.shell:
+    cmd: oc get namespace {{ snapshot_osac_namespace }} >/dev/null 2>&1 && echo {{ snapshot_osac_namespace }} || echo {{ osac_namespace }}
+  environment:
+    KUBECONFIG: /root/.kube/config
+  register: _detected_osac_ns
+  changed_when: false
+  failed_when: false
+
+- name: Set effective OSAC namespace
+  ansible.builtin.set_fact:
+    _osac_namespace: "{{ _detected_osac_ns.stdout | default(osac_namespace) }}"
+
 - name: Create lab gather subdirectories
   ansible.builtin.file:
     path: "{{ _gather_dir }}/lab/{{ item }}"
@@ -260,7 +273,7 @@
   failed_when: false
 
 - name: Gather OSAC namespace pods
-  ansible.builtin.shell: oc get pods -n {{ osac_namespace }} -o wide > {{ _gather_dir }}/lab/ocp/pods-osac 2>&1 || echo "OSAC namespace not found" > {{ _gather_dir }}/lab/ocp/pods-osac
+  ansible.builtin.shell: oc get pods -n {{ _osac_namespace }} -o wide > {{ _gather_dir }}/lab/ocp/pods-osac 2>&1 || echo "OSAC namespace not found" > {{ _gather_dir }}/lab/ocp/pods-osac
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
@@ -274,7 +287,7 @@
   failed_when: false
 
 - name: Gather OCP events in OSAC namespace
-  ansible.builtin.shell: oc get events -n {{ osac_namespace }} --sort-by=.lastTimestamp > {{ _gather_dir }}/lab/ocp/events-osac 2>&1 || echo "no events" > {{ _gather_dir }}/lab/ocp/events-osac
+  ansible.builtin.shell: oc get events -n {{ _osac_namespace }} --sort-by=.lastTimestamp > {{ _gather_dir }}/lab/ocp/events-osac 2>&1 || echo "no events" > {{ _gather_dir }}/lab/ocp/events-osac
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
@@ -668,28 +681,28 @@
 
 # ── OSAC ──
 - name: Gather OSAC Helm releases
-  ansible.builtin.shell: helm list -n {{ osac_namespace }} > {{ _gather_dir }}/lab/osac/helm-releases 2>&1 || echo "no helm releases" > {{ _gather_dir }}/lab/osac/helm-releases
+  ansible.builtin.shell: helm list -n {{ _osac_namespace }} > {{ _gather_dir }}/lab/osac/helm-releases 2>&1 || echo "no helm releases" > {{ _gather_dir }}/lab/osac/helm-releases
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
 - name: Gather OSAC deployments
-  ansible.builtin.shell: oc get deployments -n {{ osac_namespace }} > {{ _gather_dir }}/lab/osac/deployments 2>&1 || echo "no deployments" > {{ _gather_dir }}/lab/osac/deployments
+  ansible.builtin.shell: oc get deployments -n {{ _osac_namespace }} > {{ _gather_dir }}/lab/osac/deployments 2>&1 || echo "no deployments" > {{ _gather_dir }}/lab/osac/deployments
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
 - name: Gather OSAC services
-  ansible.builtin.shell: oc get svc -n {{ osac_namespace }} > {{ _gather_dir }}/lab/osac/services 2>&1 || echo "no services" > {{ _gather_dir }}/lab/osac/services
+  ansible.builtin.shell: oc get svc -n {{ _osac_namespace }} > {{ _gather_dir }}/lab/osac/services 2>&1 || echo "no services" > {{ _gather_dir }}/lab/osac/services
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
   failed_when: false
 
 - name: Gather OSAC routes
-  ansible.builtin.shell: oc get routes -n {{ osac_namespace }} > {{ _gather_dir }}/lab/osac/routes 2>&1 || echo "no routes" > {{ _gather_dir }}/lab/osac/routes
+  ansible.builtin.shell: oc get routes -n {{ _osac_namespace }} > {{ _gather_dir }}/lab/osac/routes 2>&1 || echo "no routes" > {{ _gather_dir }}/lab/osac/routes
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
@@ -697,9 +710,9 @@
 
 - name: Gather OSAC pod logs (last 50 lines per pod)
   ansible.builtin.shell: |
-    for pod in $(oc get pods -n {{ osac_namespace }} --no-headers -o custom-columns=':metadata.name' 2>/dev/null); do
+    for pod in $(oc get pods -n {{ _osac_namespace }} --no-headers -o custom-columns=':metadata.name' 2>/dev/null); do
       echo "=== $pod ==="
-      oc logs "$pod" -n {{ osac_namespace }} --tail=50 2>&1
+      oc logs "$pod" -n {{ _osac_namespace }} --tail=50 2>&1
       echo
     done > {{ _gather_dir }}/lab/osac/pod-logs 2>&1
   environment:
@@ -778,7 +791,7 @@
   failed_when: false
 
 - name: Gather ca-bundle ConfigMap in OSAC namespace
-  ansible.builtin.shell: oc get configmap ca-bundle -n {{ osac_namespace }} -o yaml > {{ _gather_dir }}/lab/osac/prerequisites/ca-bundle-configmap 2>&1 || echo "ca-bundle ConfigMap not found" > {{ _gather_dir }}/lab/osac/prerequisites/ca-bundle-configmap
+  ansible.builtin.shell: oc get configmap ca-bundle -n {{ _osac_namespace }} -o yaml > {{ _gather_dir }}/lab/osac/prerequisites/ca-bundle-configmap 2>&1 || echo "ca-bundle ConfigMap not found" > {{ _gather_dir }}/lab/osac/prerequisites/ca-bundle-configmap
   environment:
     KUBECONFIG: /root/.kube/config
   changed_when: false
