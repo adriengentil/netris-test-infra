@@ -116,6 +116,32 @@
     KUBECONFIG: /root/.kube/config
   changed_when: false
 
+- name: Build list of CI images to pre-pull
+  ansible.builtin.set_fact:
+    _prepull_images: >-
+      {{
+        ([] +
+         ([fulfillment_service_image] if fulfillment_service_image | default('') | length > 0 else []) +
+         ([osac_operator_image] if osac_operator_image | default('') | length > 0 else []) +
+         ([osac_aap_image] if osac_aap_image | default('') | length > 0 else []))
+      }}
+
+- name: Pre-pull CI images onto SNO node
+  ansible.builtin.shell:
+    cmd: >-
+      ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10
+      -i {{ snapshot_flavor_dir }}/crypto/cluster-tool.key
+      core@{{ ocp_dnat_ip }}
+      "sudo crictl pull '{{ item }}'"
+  loop: "{{ _prepull_images }}"
+  loop_control:
+    label: "{{ item.split('/')[-1] }}"
+  register: _prepull_result
+  until: _prepull_result.rc == 0
+  retries: 5
+  delay: 30
+  when: _prepull_images | length > 0
+
 - name: Report OSAC prep completed
   ansible.builtin.debug:
     msg: "OSAC prep completed — ready for refresh script"
