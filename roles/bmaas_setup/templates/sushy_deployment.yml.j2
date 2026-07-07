@@ -22,6 +22,8 @@ spec:
           ports:
             - containerPort: {{ bmaas_sushy_port }}
           env:
+            - name: HOME
+              value: /root
             - name: SUSHY_EMULATOR_LIBVIRT_URI
               value: "qemu+ssh://{{ bmaas_hypervisor_bastion_user }}@{{ bmaas_hypervisor_bastion_ip }}/system?keyfile=/root/.ssh/id_rsa&no_verify=1&no_tty=1"
             - name: SUSHY_EMULATOR_LISTEN_PORT
@@ -34,7 +36,10 @@ spec:
         - name: ssh-key
           secret:
             secretName: bmaas-sushy-ssh-key
-            defaultMode: 0600
+            # 0600 would only be readable by the file owner (root); OpenShift's default
+            # SCC runs containers as an arbitrary non-root UID, so the key must stay
+            # group-readable (via the pod's SCC-assigned fsGroup) without being writable.
+            defaultMode: 0440
 ---
 apiVersion: v1
 kind: Service
