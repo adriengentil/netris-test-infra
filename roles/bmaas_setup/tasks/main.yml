@@ -15,13 +15,44 @@
   retries: 10
   delay: 15
 
+- name: Find target VMs
+  ansible.builtin.shell:
+    cmd: virsh list --all --name | grep "{{ item }}"
+  register: _target_vm_lookup
+  changed_when: false
+  loop: "{{ bmaas_target_vm_patterns }}"
+
+- name: Build VM name list
+  ansible.builtin.set_fact:
+    bmaas_target_vms: "{{ _target_vm_lookup.results | map(attribute='stdout_lines') | map('first') | list }}"
+
+- name: Get VM UUIDs
+  ansible.builtin.shell:
+    cmd: virsh domuuid {{ item }}
+  register: _target_vm_uuids
+  changed_when: false
+  loop: "{{ bmaas_target_vms }}"
+
+- name: Get VM mgmt NIC MAC addresses
+  ansible.builtin.shell:
+    cmd: virsh domiflist {{ item }} | grep bridge | awk '{print $5}'
+  register: _target_vm_macs
+  changed_when: false
+  loop: "{{ bmaas_target_vms }}"
+
+- name: Build target host list (name, uuid, mac)
+  ansible.builtin.set_fact:
+    bmaas_targets: "{{ bmaas_target_vms | zip(_target_vm_uuids.results | map(attribute='stdout') | map('trim'), _target_vm_macs.results | map(attribute='stdout') | map('trim')) | list }}"
+
 - name: Apply BareMetalHost CRs
   ansible.builtin.shell:
     cmd: oc apply -f -
     stdin: "{{ lookup('ansible.builtin.template', 'baremetal_host.yml.j2') }}"
   environment:
     KUBECONFIG: /root/.kube/config
-  loop: "{{ bmaas_target_vm_patterns }}"
+  loop: "{{ bmaas_targets }}"
+  loop_control:
+    label: "{{ item[0] }}"
   register: _bmh_apply
   changed_when: "'created' in _bmh_apply.stdout or 'configured' in _bmh_apply.stdout"
   until: _bmh_apply.rc == 0
@@ -31,7 +62,7 @@
 - name: Wait for BareMetalHost to become available
   ansible.builtin.shell:
     cmd: >
-      oc get baremetalhost {{ item }} -n {{ snapshot_osac_namespace | default(osac_namespace) }}
+      oc get baremetalhost {{ item[0] }} -n {{ snapshot_osac_namespace | default(osac_namespace) }}
       -o jsonpath='{.status.provisioning.state}'
   environment:
     KUBECONFIG: /root/.kube/config
@@ -40,7 +71,9 @@
   retries: 60
   delay: 30
   changed_when: false
-  loop: "{{ bmaas_target_vm_patterns }}"
+  loop: "{{ bmaas_targets }}"
+  loop_control:
+    label: "{{ item[0] }}"
 
 - name: Get fulfillment internal API URL
   ansible.builtin.shell:
@@ -102,6 +135,6 @@
 - name: Report BMaaS setup complete
   ansible.builtin.debug:
     msg: >-
-      BMaaS setup: {{ bmaas_target_vm_patterns | length }} BareMetalHost(s) available,
+      BMaaS setup: {{ bmaas_targets | length }} BareMetalHost(s) available,
       sushy-tools live, host type {{ bmaas_host_type_id }} and catalog item
       {{ bmaas_catalog_item }} registered.

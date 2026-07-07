@@ -113,11 +113,8 @@ caas_agents:
   - vm_pattern: "hgx-pod00-su0-h03"
     netris_server_name: "hgx-pod00-su0-h03"
 
-# BMaaS Discovery (repurpose the same lab VMs CaaS uses as fake bare-metal hosts)
+# BMaaS targets (same lab VMs CaaS uses as fake bare-metal hosts)
 bmaas_target_vm_patterns: "{{ caas_discovery_vm_patterns }}"
-bmaas_target_vcpu: 2
-bmaas_target_memory_mb: 4096
-bmaas_target_disk_gb: 20
 
 # BMaaS Setup (sushy-tools, BareMetalHost registration, OSAC host type/catalog item)
 bmaas_hypervisor_bastion_ip: "192.168.16.254"
