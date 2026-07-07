@@ -2,8 +2,6 @@
 - name: Post-OSAC — scale down MCE operators and filter OS images
   hosts: all
   gather_facts: false
-  roles:
-    - bmf_enable
   tasks:
     - name: Scale down MCE operators to prevent OS_IMAGES overwrites
       ansible.builtin.command:

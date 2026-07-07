@@ -1,0 +1,62 @@
+---
+# Activates OpenShift's built-in baremetal operator and gives OSAC's bmf operator
+# its real metal3 backend config. Requires `metal3_namespace` (the namespace where
+# bmf and BareMetalHost objects live) to be set by the caller.
+
+- name: Render real bmf-operator config
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/tmp/metal3-setup-{{ item }}"
+    mode: "0600"
+  loop:
+    - inventory.yaml
+    - management.yaml
+    - clouds.yaml
+
+- name: Create real secrets for bmf-operator
+  ansible.builtin.shell:
+    cmd: >
+      oc create secret generic {{ item.name }}
+      --from-file={{ item.key }}=/tmp/metal3-setup-{{ item.key }}
+      -n {{ metal3_namespace }}
+      --dry-run=client -o yaml | oc apply -f -
+  environment:
+    KUBECONFIG: /root/.kube/config
+  loop:
+    - { name: "osac-inventory-config", key: "inventory.yaml" }
+    - { name: "osac-management-config", key: "management.yaml" }
+    - { name: "osac-os-clouds", key: "clouds.yaml" }
+  changed_when: false
+  register: _secrets_result
+  until: _secrets_result.rc == 0
+  retries: 10
+  delay: 15
+
+- name: Find OCP server VM for Provisioning CR
+  ansible.builtin.shell:
+    cmd: virsh list --all --name | grep "{{ ocp_vm_name_pattern }}"
+  register: _bmf_vm_lookup
+  changed_when: false
+
+- name: Get mgmt NIC MAC address for Provisioning CR
+  ansible.builtin.shell:
+    cmd: virsh domiflist {{ _bmf_vm_lookup.stdout_lines[0] }} | grep bridge | awk '{print $5}'
+  register: _mgmt_mac_for_bmf
+  changed_when: false
+
+- name: Render Provisioning CR
+  ansible.builtin.template:
+    src: provisioning.yml.j2
+    dest: /tmp/metal3-setup-provisioning.yml
+    mode: "0600"
+
+- name: Activate OpenShift's baremetal operator (Ironic) for BMaaS
+  ansible.builtin.command:
+    cmd: oc apply -f /tmp/metal3-setup-provisioning.yml
+  environment:
+    KUBECONFIG: /root/.kube/config
+  register: _provisioning_apply
+  changed_when: "'created' in _provisioning_apply.stdout or 'configured' in _provisioning_apply.stdout"
+  until: _provisioning_apply.rc == 0
+  retries: 10
+  delay: 15

@@ -4,4 +4,3 @@
   gather_facts: false
   roles:
     - osac_post_refresh
-    - bmf_enable

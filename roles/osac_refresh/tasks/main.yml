@@ -111,6 +111,12 @@
       fi
   changed_when: false
 
+- name: Configure metal3 backend for bmf and activate baremetal operator
+  ansible.builtin.include_role:
+    name: metal3_setup
+  vars:
+    metal3_namespace: "{{ snapshot_osac_namespace }}"
+
 - name: Disable osac-ui (image not published yet)
   ansible.builtin.shell:
     cmd: |
