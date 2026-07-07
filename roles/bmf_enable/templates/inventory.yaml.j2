@@ -1,0 +1,7 @@
+name: metal3-inventory
+type: metal3
+hostClass: metal3
+networkClass: metal3
+options:
+  metal3:
+    namespace: {{ snapshot_osac_namespace | default(osac_namespace) }}

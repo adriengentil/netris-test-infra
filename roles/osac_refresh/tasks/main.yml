@@ -100,6 +100,17 @@
         {{ osac_installer_dir }}/{{ snapshot_osac_values_file }}
   when: osac_aap_branch | default('') | length > 0
 
+- name: Enable bare-metal fulfillment operator in values file
+  ansible.builtin.shell:
+    cmd: |
+      if grep -q '^bmf:' {{ osac_installer_dir }}/{{ snapshot_osac_values_file }}; then
+        sed -i '/^bmf:/,/^[a-z]/{s/enabled: false/enabled: true/}' \
+          {{ osac_installer_dir }}/{{ snapshot_osac_values_file }}
+      else
+        printf 'bmf:\n  enabled: true\n' >> {{ osac_installer_dir }}/{{ snapshot_osac_values_file }}
+      fi
+  changed_when: false
+
 - name: Disable osac-ui (image not published yet)
   ansible.builtin.shell:
     cmd: |

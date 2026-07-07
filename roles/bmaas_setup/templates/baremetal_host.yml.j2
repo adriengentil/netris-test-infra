@@ -1,0 +1,14 @@
+---
+apiVersion: metal3.io/v1alpha1
+kind: BareMetalHost
+metadata:
+  name: {{ item }}
+  namespace: {{ snapshot_osac_namespace | default(osac_namespace) }}
+  labels:
+    osac.openshift.io/host-type: {{ bmaas_host_type_id }}
+    osac.openshift.io/managed-by: baremetal
+spec:
+  online: true
+  bmc:
+    address: "redfish-virtualmedia+http://sushy-tools.{{ snapshot_osac_namespace | default(osac_namespace) }}.svc.cluster.local:{{ bmaas_sushy_port }}/redfish/v1/Systems/{{ item }}"
+    credentialsName: bmaas-bmc-creds

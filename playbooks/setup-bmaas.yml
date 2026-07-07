@@ -1,0 +1,7 @@
+---
+- name: Set up BMaaS — repurpose target VMs, deploy sushy-tools, register BareMetalHosts
+  hosts: all
+  gather_facts: false
+  roles:
+    - bmaas_discovery
+    - bmaas_setup

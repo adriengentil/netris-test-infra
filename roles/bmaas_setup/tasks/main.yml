@@ -1,0 +1,165 @@
+---
+- name: Create sushy-tools SSH key secret
+  ansible.builtin.shell:
+    cmd: >
+      oc create secret generic bmaas-sushy-ssh-key
+      --from-file=id_rsa={{ ssh_public_key_path | regex_replace('\.pub$', '') }}
+      -n {{ snapshot_osac_namespace | default(osac_namespace) }}
+      --dry-run=client -o yaml | oc apply -f -
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  register: _sushy_key_result
+  until: _sushy_key_result.rc == 0
+  retries: 10
+  delay: 15
+
+- name: Render sushy-tools Deployment and Service
+  ansible.builtin.template:
+    src: sushy_deployment.yml.j2
+    dest: /tmp/bmaas-sushy.yml
+    mode: "0600"
+
+- name: Apply sushy-tools Deployment and Service
+  ansible.builtin.command:
+    cmd: oc apply -f /tmp/bmaas-sushy.yml
+  environment:
+    KUBECONFIG: /root/.kube/config
+  register: _sushy_apply
+  changed_when: "'created' in _sushy_apply.stdout or 'configured' in _sushy_apply.stdout"
+  until: _sushy_apply.rc == 0
+  retries: 10
+  delay: 15
+
+- name: Wait for sushy-tools rollout
+  ansible.builtin.command:
+    cmd: oc rollout status deployment/sushy-tools -n {{ snapshot_osac_namespace | default(osac_namespace) }} --timeout=120s
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+
+- name: Confirm sushy-tools Redfish endpoint is live
+  ansible.builtin.shell:
+    cmd: >
+      oc exec deploy/sushy-tools -n {{ snapshot_osac_namespace | default(osac_namespace) }} --
+      curl -sf http://localhost:{{ bmaas_sushy_port }}/redfish/v1/
+  environment:
+    KUBECONFIG: /root/.kube/config
+  register: _sushy_health
+  until: _sushy_health.rc == 0
+  retries: 10
+  delay: 10
+  changed_when: false
+
+- name: Create BMC credentials secret
+  ansible.builtin.shell:
+    cmd: >
+      oc create secret generic bmaas-bmc-creds
+      --from-literal=username={{ bmaas_bmc_username }}
+      --from-literal=password={{ bmaas_bmc_password }}
+      -n {{ snapshot_osac_namespace | default(osac_namespace) }}
+      --dry-run=client -o yaml | oc apply -f -
+  environment:
+    KUBECONFIG: /root/.kube/config
+  changed_when: false
+  register: _bmc_creds_result
+  until: _bmc_creds_result.rc == 0
+  retries: 10
+  delay: 15
+
+- name: Render BareMetalHost CRs
+  ansible.builtin.template:
+    src: baremetal_host.yml.j2
+    dest: "/tmp/bmaas-bmh-{{ item }}.yml"
+    mode: "0600"
+  loop: "{{ bmaas_target_vm_patterns }}"
+
+- name: Apply BareMetalHost CRs
+  ansible.builtin.command:
+    cmd: oc apply -f /tmp/bmaas-bmh-{{ item }}.yml
+  environment:
+    KUBECONFIG: /root/.kube/config
+  loop: "{{ bmaas_target_vm_patterns }}"
+  register: _bmh_apply
+  changed_when: "'created' in _bmh_apply.stdout or 'configured' in _bmh_apply.stdout"
+  until: _bmh_apply.rc == 0
+  retries: 10
+  delay: 15
+
+- name: Wait for BareMetalHost to become available
+  ansible.builtin.shell:
+    cmd: >
+      oc get baremetalhost {{ item }} -n {{ snapshot_osac_namespace | default(osac_namespace) }}
+      -o jsonpath='{.status.provisioning.state}'
+  environment:
+    KUBECONFIG: /root/.kube/config
+  register: _bmh_state
+  until: _bmh_state.stdout == 'available'
+  retries: 60
+  delay: 30
+  changed_when: false
+  loop: "{{ bmaas_target_vm_patterns }}"
+
+- name: Get fulfillment internal API URL
+  ansible.builtin.shell:
+    cmd: oc get route fulfillment-internal-api -n {{ snapshot_osac_namespace | default(osac_namespace) }} -o jsonpath='{.status.ingress[0].host}'
+  environment:
+    KUBECONFIG: /root/.kube/config
+  register: _fulfillment_host
+  changed_when: false
+  until: _fulfillment_host.rc == 0 and _fulfillment_host.stdout | length > 0
+  retries: 10
+  delay: 15
+
+- name: Set fulfillment API URL
+  ansible.builtin.set_fact:
+    bmaas_fulfillment_api: "https://{{ _fulfillment_host.stdout }}"
+
+- name: Get service account token
+  ansible.builtin.shell:
+    cmd: oc create token -n {{ snapshot_osac_namespace | default(osac_namespace) }} admin
+  environment:
+    KUBECONFIG: /root/.kube/config
+  register: _sa_token
+  changed_when: false
+  until: _sa_token.rc == 0 and _sa_token.stdout | length > 0
+  retries: 10
+  delay: 15
+
+- name: Create bare-metal host type
+  ansible.builtin.uri:
+    url: "{{ bmaas_fulfillment_api }}/api/private/v1/host_types"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ _sa_token.stdout }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      id: "{{ bmaas_host_type_id }}"
+      title: "{{ bmaas_host_type_title }}"
+      description: "{{ bmaas_host_type_description }}"
+    validate_certs: false
+    status_code: [200, 201, 409]
+
+- name: Create bare-metal instance catalog item
+  ansible.builtin.uri:
+    url: "{{ bmaas_fulfillment_api }}/api/private/v1/baremetal_instance_catalog_items"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ _sa_token.stdout }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      id: "{{ bmaas_catalog_item }}"
+      title: "{{ bmaas_catalog_item_title }}"
+      description: "{{ bmaas_catalog_item_description }}"
+      published: true
+    validate_certs: false
+    status_code: [200, 201, 409]
+
+- name: Report BMaaS setup complete
+  ansible.builtin.debug:
+    msg: >-
+      BMaaS setup: {{ bmaas_target_vm_patterns | length }} BareMetalHost(s) available,
+      sushy-tools live, host type {{ bmaas_host_type_id }} and catalog item
+      {{ bmaas_catalog_item }} registered.

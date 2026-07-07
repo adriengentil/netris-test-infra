@@ -127,12 +127,12 @@
              | combine({'bundledPostgres': {'enabled': true}}, recursive=true)
              | to_nice_yaml(indent=2) }}
 
-- name: Disable bare-metal fulfillment operator
+- name: Enable bare-metal fulfillment operator
   ansible.builtin.blockinfile:
     path: "{{ osac_installer_dir }}/{{ osac_values_file }}"
     block: |
       bmf:
-        enabled: false
+        enabled: true
     marker: "# {mark} NETRIS-TEST-INFRA BMF OVERRIDE"
 
 - name: Override component images in values file
