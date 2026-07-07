@@ -124,6 +124,7 @@ bmaas_hypervisor_bastion_ip: "192.168.16.254"
 bmaas_hypervisor_bastion_user: "root"
 bmaas_sushy_port: 8000
 bmaas_sushy_image: "quay.io/metal3-io/sushy-tools:latest"
+bmaas_sushy_key_path: "{{ lookup('env', 'HOME') }}/.ssh/bmaas_sushy_key"
 bmaas_bmc_username: "admin"
 bmaas_bmc_password: "netris"
 bmaas_host_type_id: "ci-baremetal"
