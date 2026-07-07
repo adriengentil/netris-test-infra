@@ -190,11 +190,38 @@
     state: directory
     mode: "0755"
 
-- name: Configure metal3 backend for bmf and activate baremetal operator
+- name: Render real bmf-operator config
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/tmp/osac-install-{{ item }}"
+    mode: "0600"
+  loop:
+    - inventory.yaml
+    - management.yaml
+    - clouds.yaml
+
+- name: Create real secrets for bmf-operator
+  ansible.builtin.shell:
+    cmd: >
+      oc create secret generic {{ item.name }}
+      --from-file={{ item.key }}=/tmp/osac-install-{{ item.key }}
+      -n {{ osac_namespace }}
+      --dry-run=client -o yaml | oc apply -f -
+  environment:
+    KUBECONFIG: /root/.kube/config
+  loop:
+    - { name: "osac-inventory-config", key: "inventory.yaml" }
+    - { name: "osac-management-config", key: "management.yaml" }
+    - { name: "osac-os-clouds", key: "clouds.yaml" }
+  changed_when: false
+  register: _secrets_result
+  until: _secrets_result.rc == 0
+  retries: 10
+  delay: 15
+
+- name: Activate OpenShift's baremetal operator for BMaaS
   ansible.builtin.include_role:
     name: metal3_setup
-  vars:
-    metal3_namespace: "{{ osac_namespace }}"
 
 - name: Create placeholder AAP API token secret
   ansible.builtin.shell:
