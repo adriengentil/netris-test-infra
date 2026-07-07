@@ -1,9 +1,19 @@
 ---
+- name: Generate SSH keypair for sushy-tools to reach the hypervisor
+  ansible.builtin.command:
+    cmd: ssh-keygen -t ed25519 -f /root/.ssh/bmaas_sushy_key -N '' -q
+    creates: /root/.ssh/bmaas_sushy_key
+
+- name: Trust the sushy-tools key for root on the hypervisor
+  ansible.posix.authorized_key:
+    user: root
+    key: "{{ lookup('file', '/root/.ssh/bmaas_sushy_key.pub') }}"
+
 - name: Create sushy-tools SSH key secret
   ansible.builtin.shell:
     cmd: >
       oc create secret generic bmaas-sushy-ssh-key
-      --from-file=id_rsa={{ ssh_public_key_path | regex_replace('\.pub$', '') }}
+      --from-file=id_rsa=/root/.ssh/bmaas_sushy_key
       -n {{ snapshot_osac_namespace | default(osac_namespace) }}
       --dry-run=client -o yaml | oc apply -f -
   environment:

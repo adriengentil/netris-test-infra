@@ -96,6 +96,21 @@
     label: "{{ item.item }}"
   changed_when: true
 
+- name: Untrust the sushy-tools SSH key on the hypervisor
+  ansible.posix.authorized_key:
+    user: root
+    key: "{{ lookup('file', '/root/.ssh/bmaas_sushy_key.pub') }}"
+    state: absent
+  failed_when: false
+
+- name: Remove sushy-tools SSH keypair
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /root/.ssh/bmaas_sushy_key
+    - /root/.ssh/bmaas_sushy_key.pub
+
 - name: Report BMaaS teardown complete
   ansible.builtin.debug:
     msg: "BMaaS teardown complete: BareMetalHosts/sushy-tools removed, target VMs stopped (not undefined — shared lab VMs)."
