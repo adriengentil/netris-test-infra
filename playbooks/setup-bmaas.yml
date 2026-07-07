@@ -4,4 +4,5 @@
   gather_facts: false
   roles:
     - bmaas_discovery
+    - sushy_setup
     - bmaas_setup
