@@ -14,15 +14,10 @@
   register: _mgmt_mac_for_bmf
   changed_when: false
 
-- name: Render Provisioning CR
-  ansible.builtin.template:
-    src: provisioning.yml.j2
-    dest: /tmp/metal3-setup-provisioning.yml
-    mode: "0600"
-
 - name: Activate OpenShift's baremetal operator (Ironic) for BMaaS
-  ansible.builtin.command:
-    cmd: oc apply -f /tmp/metal3-setup-provisioning.yml
+  ansible.builtin.shell:
+    cmd: oc apply -f -
+    stdin: "{{ lookup('ansible.builtin.template', 'provisioning.yml.j2') }}"
   environment:
     KUBECONFIG: /root/.kube/config
   register: _provisioning_apply

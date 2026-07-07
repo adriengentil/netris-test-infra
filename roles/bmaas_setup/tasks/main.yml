@@ -14,15 +14,10 @@
   retries: 10
   delay: 15
 
-- name: Render sushy-tools Deployment and Service
-  ansible.builtin.template:
-    src: sushy_deployment.yml.j2
-    dest: /tmp/bmaas-sushy.yml
-    mode: "0600"
-
 - name: Apply sushy-tools Deployment and Service
-  ansible.builtin.command:
-    cmd: oc apply -f /tmp/bmaas-sushy.yml
+  ansible.builtin.shell:
+    cmd: oc apply -f -
+    stdin: "{{ lookup('ansible.builtin.template', 'sushy_deployment.yml.j2') }}"
   environment:
     KUBECONFIG: /root/.kube/config
   register: _sushy_apply
@@ -67,16 +62,10 @@
   retries: 10
   delay: 15
 
-- name: Render BareMetalHost CRs
-  ansible.builtin.template:
-    src: baremetal_host.yml.j2
-    dest: "/tmp/bmaas-bmh-{{ item }}.yml"
-    mode: "0600"
-  loop: "{{ bmaas_target_vm_patterns }}"
-
 - name: Apply BareMetalHost CRs
-  ansible.builtin.command:
-    cmd: oc apply -f /tmp/bmaas-bmh-{{ item }}.yml
+  ansible.builtin.shell:
+    cmd: oc apply -f -
+    stdin: "{{ lookup('ansible.builtin.template', 'baremetal_host.yml.j2') }}"
   environment:
     KUBECONFIG: /root/.kube/config
   loop: "{{ bmaas_target_vm_patterns }}"
